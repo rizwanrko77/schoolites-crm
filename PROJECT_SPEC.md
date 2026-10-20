@@ -99,7 +99,44 @@ graph TD
 | **Phase 4** | Business Relations workspace, atomic lead claiming, note segregation, duplicate detection engine | ✅ Complete |
 | **Asset Storage Upgrade** | Neon Object Storage (`storage-bucket`): 5MB image/PDF uploads, subfolder structure (`assets/${assetId}/`), video links, asset editing, and automated bucket folder cleanup | ✅ Complete |
 | **Partner Workspace Alignment** | Synchronized Pre-Sales and Referral Partner asset views with Admin (inline carousels, lightbox zoom, monospace body text copy, single/all download prompts) | ✅ Complete |
+| **Card Layout Polish** | 2-line instruction clamp with inline toggle (`Show full instructions ▼ / Show less ▲`) + auto-adjustable body pitch text box (`flex: 1` consuming empty voids on text cards) | ✅ Complete |
+| **Interactive Asset Image Manager** | Edit modal shows active thumbnails with individual `✕` removal, remaining slot counter, and targeted Neon S3 deletion of removed objects | ✅ Complete |
 | **Version Control Sync** | Connected to GitHub (`https://github.com/rizwanrko77/schoolites-crm.git`) on `main` branch with strictly ignored `.env.local` | ✅ Complete |
 | **Phase 5** | Google Places API (New) integration with strict field masking, staging deduplication, and batch lead release | ⏳ Ready to build |
 | **Phase 6** | Deal settlement & bank UTR reference tracking in `/admin/incentives` | ⏳ Ready to build |
+
+---
+
+## 7. Marketing Assets Architecture (Reference for Resuming)
+
+### File Structure & Storage Paths:
+* **Neon S3 Bucket:** `storage-bucket` (Singapore `ap-southeast-1`, custom endpoint).
+* **Asset Subfolder Convention:** `assets/${assetId}/${timestamp}-${cleanName}`.
+* **Database Representation:**
+  * `assets.storage_key`: Points to primary/first file.
+  * `assets.files`: JSONB array of all uploaded files with `{ url, storage_key, name, size, mime_type }`.
+  * `assets.body_text`: Outreach message / WhatsApp copy.
+  * `assets.description`: Internal rep usage instructions.
+
+### Deletion & Edit Cleanups:
+* Complete asset deletion purges the entire subfolder `assets/${assetId}/` using `deleteAssetFolderFromStorage(assetId)`.
+* Partial image deletion during edit targets only the removed storage keys via `deleteFromStorage(removedKey)`.
+
+### Card UI Mechanics:
+* **Instructions Clamp:** 2-line WebKit box clamp with inline `Show full instructions ▼ / Show less ▲` toggle to prevent vertical blowout across grid rows.
+* **Auto-Adjustable Pitch Text:** Text-only assets automatically expand (`flex: 1`, min 180px, max 300px) to utilize grid row height, eliminating empty black voids.
+
+---
+
+## 8. Tomorrow's Agenda & Next Steps
+
+When resuming:
+1. **Sanity Check:** Verify the active session on `http://localhost:3000` (Admin: `admin@schoolites.com`, Pre-Sales: `rahul.ps@schoolites.com`, Partner: `anita.partner@schoolites.com`, BR: `vikram.br@schoolites.com`).
+2. **Phase 5: Outbound Prospecting Pipeline (Google Places API New):**
+   * Staging table (`db_businesses`) with phone & name deduplication against existing leads and enquiries.
+   * Admin search interface (City / Keyword / Institution Type) with field masking (only Name, City, Type exposed to junior reps until claimed).
+   * Batch release mechanism (10 or 25 leads per batch) allocated to Pre-Sales and Partners.
+3. **Phase 6: Commission & Incentive Settlements:**
+   * `/admin/incentives` clearance modal recording bank UTR / NEFT reference numbers, payout timestamps, and auto-updating partner commission statuses to `cleared`.
+
 

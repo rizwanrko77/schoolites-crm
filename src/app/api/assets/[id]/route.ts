@@ -47,6 +47,16 @@ export async function PUT(
       if (formData.has('body_text')) bodyText = (formData.get('body_text') as string) || null;
 
       if (existing.file_type === 'image') {
+        const retainedFilesRaw = formData.get('retained_files') as string | null;
+        let retainedKeys: string[] | null = null;
+        if (retainedFilesRaw) {
+          try {
+            retainedKeys = JSON.parse(retainedFilesRaw);
+          } catch (e) {
+            console.error('Failed to parse retained_files:', e);
+          }
+        }
+
         const files = formData.getAll('files') as File[];
         const singleFile = formData.get('file') as File | null;
 
@@ -57,44 +67,67 @@ export async function PUT(
           newFiles.push(singleFile);
         }
 
-        if (newFiles.length > 0) {
-          if (newFiles.length > MAX_IMAGES_COUNT) {
-            return NextResponse.json({ error: `Maximum ${MAX_IMAGES_COUNT} images allowed per asset.` }, { status: 400 });
-          }
-
-          for (const file of newFiles) {
-            if (file.size > MAX_FILE_SIZE) {
-              return NextResponse.json(
-                { error: `"${file.name}" exceeds 5MB limit.` },
-                { status: 400 }
-              );
-            }
-            if (!file.type.startsWith('image/')) {
-              return NextResponse.json({ error: `"${file.name}" is not an image.` }, { status: 400 });
+        // Filter existing files based on retained_files list (if provided)
+        let survivingFiles: any[] = [];
+        if (Array.isArray(retainedKeys)) {
+          const oldFiles = Array.isArray(existing.files) ? existing.files : [];
+          for (const oldFile of oldFiles) {
+            if (oldFile.storage_key && retainedKeys.includes(oldFile.storage_key)) {
+              survivingFiles.push(oldFile);
+            } else if (oldFile.storage_key) {
+              // Delete individual removed file from Neon Object Storage
+              await deleteFromStorage(oldFile.storage_key);
             }
           }
-
-          // Clean up old files in asset's folder
+        } else if (newFiles.length > 0) {
+          // If no retained_files specified but new files provided (legacy fallback)
           await deleteAssetFolderFromStorage(id);
-
-          // Upload new files to assets/{id}/
-          filesData = [];
-          for (let i = 0; i < newFiles.length; i++) {
-            const file = newFiles[i];
-            const buffer = Buffer.from(await file.arrayBuffer());
-            const uploadRes = await uploadToStorage(buffer, file.name, file.type || 'image/png', id);
-            filesData.push({
-              url: `/api/assets/${id}/file?index=${i}`,
-              storage_key: uploadRes.key,
-              name: file.name,
-              size: file.size,
-              mime_type: file.type,
-            });
-          }
-
-          storageKey = filesData[0].storage_key;
-          contentUrl = `/api/assets/${id}/file`;
+          survivingFiles = [];
+        } else {
+          survivingFiles = Array.isArray(existing.files) ? existing.files : [];
         }
+
+        if (survivingFiles.length + newFiles.length === 0) {
+          return NextResponse.json({ error: 'At least 1 image is required for this asset.' }, { status: 400 });
+        }
+
+        if (survivingFiles.length + newFiles.length > MAX_IMAGES_COUNT) {
+          return NextResponse.json({ error: `Maximum ${MAX_IMAGES_COUNT} images allowed per asset.` }, { status: 400 });
+        }
+
+        for (const file of newFiles) {
+          if (file.size > MAX_FILE_SIZE) {
+            return NextResponse.json(
+              { error: `"${file.name}" exceeds 5MB limit.` },
+              { status: 400 }
+            );
+          }
+          if (!file.type.startsWith('image/')) {
+            return NextResponse.json({ error: `"${file.name}" is not an image.` }, { status: 400 });
+          }
+        }
+
+        // Upload any new files into the asset subfolder
+        for (const file of newFiles) {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const uploadRes = await uploadToStorage(buffer, file.name, file.type || 'image/png', id);
+          survivingFiles.push({
+            url: '',
+            storage_key: uploadRes.key,
+            name: file.name,
+            size: file.size,
+            mime_type: file.type,
+          });
+        }
+
+        // Re-index all files so URLs are sequential (index=0..N-1)
+        filesData = survivingFiles.map((item, idx) => ({
+          ...item,
+          url: `/api/assets/${id}/file?index=${idx}`,
+        }));
+
+        storageKey = filesData[0]?.storage_key || null;
+        contentUrl = `/api/assets/${id}/file`;
       } else if (existing.file_type === 'pdf') {
         const file = formData.get('file') as File | null;
         if (file && file.size > 0) {

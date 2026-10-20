@@ -42,6 +42,10 @@ export default function AdminAssetsPage() {
   // Multi-Download Choice Modal
   const [downloadPromptAsset, setDownloadPromptAsset] = useState<Asset | null>(null);
 
+  // Instructions text expand/collapse state per card
+  const [expandedInstructions, setExpandedInstructions] = useState<Record<string, boolean>>({});
+
+
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,7 +73,9 @@ export default function AdminAssetsPage() {
     description: '',
   });
   const [editImages, setEditImages] = useState<File[]>([]);
+  const [retainedFiles, setRetainedFiles] = useState<StoredFile[]>([]);
   const [editPdf, setEditPdf] = useState<File | null>(null);
+
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -106,9 +112,9 @@ export default function AdminAssetsPage() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    const currentTotal = isEdit ? editImages.length : selectedImages.length;
+    const currentTotal = isEdit ? (retainedFiles.length + editImages.length) : selectedImages.length;
     if (currentTotal + files.length > MAX_IMAGES_COUNT) {
-      const msg = `Maximum ${MAX_IMAGES_COUNT} images allowed per asset. (${currentTotal} already selected)`;
+      const msg = `Maximum ${MAX_IMAGES_COUNT} images allowed per asset. (${currentTotal} currently active/selected)`;
       if (isEdit) setEditError(msg);
       else setFormError(msg);
       e.target.value = '';
@@ -279,6 +285,7 @@ export default function AdminAssetsPage() {
       content_url: asset.content_url,
       description: asset.description || '',
     });
+    setRetainedFiles(Array.isArray(asset.files) ? [...asset.files] : []);
     setEditImages([]);
     setEditPdf(null);
     setEditError('');
@@ -292,12 +299,19 @@ export default function AdminAssetsPage() {
 
     try {
       let res;
-      if (editingAsset.file_type === 'image' && editImages.length > 0) {
+      if (editingAsset.file_type === 'image') {
+        if (retainedFiles.length + editImages.length === 0) {
+          setEditError('At least 1 image is required for this asset.');
+          setIsEditing(false);
+          return;
+        }
+
         const data = new FormData();
         data.append('title', editFormData.title);
         data.append('category', editFormData.category);
         data.append('body_text', editFormData.body_text);
         data.append('description', editFormData.description);
+        data.append('retained_files', JSON.stringify(retainedFiles.map((f) => f.storage_key)));
         editImages.forEach((img) => data.append('files', img));
 
         res = await fetch(`/api/assets/${editingAsset.id}`, {
@@ -305,6 +319,7 @@ export default function AdminAssetsPage() {
           body: data,
         });
       } else if (editingAsset.file_type === 'pdf' && editPdf) {
+
         const data = new FormData();
         data.append('title', editFormData.title);
         data.append('category', editFormData.category);
@@ -735,7 +750,7 @@ export default function AdminAssetsPage() {
                   overflow: 'hidden',
                 }}
               >
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                   {/* Category & Type Pills Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <span
@@ -928,18 +943,53 @@ export default function AdminAssetsPage() {
 
                   {/* Usage Instructions (Internal note for reps) */}
                   {asset.description && (
-                    <p
-                      style={{
-                        fontSize: '0.82rem',
-                        color: 'var(--text-muted)',
-                        lineHeight: '1.45',
-                        marginBottom: '10px',
-                        whiteSpace: 'pre-line',
-                        fontStyle: 'italic',
-                      }}
-                    >
-                      💡 {asset.description}
-                    </p>
+                    <div style={{ marginBottom: '10px' }}>
+                      <p
+                        style={{
+                          fontSize: '0.82rem',
+                          color: 'var(--text-muted)',
+                          lineHeight: '1.45',
+                          margin: 0,
+                          fontStyle: 'italic',
+                          ...(expandedInstructions[asset.id]
+                            ? { whiteSpace: 'pre-line' }
+                            : {
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }),
+                        }}
+                      >
+                        💡 {asset.description}
+                      </p>
+                      {(asset.description.length > 80 || asset.description.includes('\n')) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedInstructions((prev) => ({
+                              ...prev,
+                              [asset.id]: !prev[asset.id],
+                            }))
+                          }
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#818cf8',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            padding: '3px 0 0 0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          {expandedInstructions[asset.id] ? 'Show less ▲' : 'Show full instructions ▼'}
+                        </button>
+                      )}
+                    </div>
                   )}
 
                   {/* 2. STYLED MONOSPACE BODY TEXT BOX WITH COPY BUTTON (ACROSS ALL TYPES) */}
@@ -953,7 +1003,9 @@ export default function AdminAssetsPage() {
                         borderRadius: 'var(--radius-sm)',
                         fontSize: '0.8rem',
                         color: '#cbd5e1',
-                        maxHeight: '130px',
+                        flex: asset.file_type === 'text' ? 1 : 'none',
+                        minHeight: asset.file_type === 'text' ? '180px' : 'auto',
+                        maxHeight: asset.file_type === 'text' ? '300px' : '110px',
                         overflowY: 'auto',
                         whiteSpace: 'pre-wrap',
                         fontFamily: 'monospace',
@@ -1562,70 +1614,183 @@ export default function AdminAssetsPage() {
                 </div>
               </div>
 
-              {/* MEDIA REPLACEMENT */}
+              {/* MEDIA REPLACEMENT / IMAGE MANAGEMENT */}
               {editingAsset.file_type === 'image' ? (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                      Replace Images (Upload up to 5)
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Asset Images ({retainedFiles.length + editImages.length} of {MAX_IMAGES_COUNT} used)
                     </label>
                     <span style={{ fontSize: '0.74rem', color: '#818cf8', fontWeight: 600 }}>
                       ⚡ Max: 5MB per image
                     </span>
                   </div>
 
-                  <div
-                    onClick={() => editImageInputRef.current?.click()}
-                    style={{
-                      border: '1px dashed var(--border-subtle)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '16px',
-                      textAlign: 'center',
-                      cursor: 'pointer',
-                      background: 'rgba(255, 255, 255, 0.02)',
-                    }}
-                  >
-                    <input
-                      ref={editImageInputRef}
-                      type="file"
-                      multiple
-                      accept="image/png,image/jpeg,image/webp,image/gif"
-                      onChange={(e) => handleImageFilesChange(e, true)}
-                      style={{ display: 'none' }}
-                    />
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                      Click to select replacement image(s) (Replaces old subfolder files)
-                    </p>
-                  </div>
-
-                  {editImages.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(75px, 1fr))', gap: '8px', marginTop: '8px' }}>
-                      {editImages.map((file, idx) => (
-                        <div key={idx} style={{ position: 'relative', height: '65px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
-                          <img src={URL.createObjectURL(file)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <button
-                            type="button"
-                            onClick={() => removeSelectedImage(idx, true)}
+                  {/* 1. Currently Uploaded Images in Neon Bucket */}
+                  {retainedFiles.length > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                        Currently Uploaded ({retainedFiles.length} file{retainedFiles.length > 1 ? 's' : ''}) — click ✕ to remove:
+                      </span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(85px, 1fr))', gap: '8px' }}>
+                        {retainedFiles.map((file, idx) => (
+                          <div
+                            key={idx}
                             style={{
-                              position: 'absolute',
-                              top: '2px',
-                              right: '2px',
-                              width: '18px',
-                              height: '18px',
-                              borderRadius: '50%',
-                              background: '#ef4444',
-                              color: '#ffffff',
-                              border: 'none',
-                              fontSize: '0.6rem',
-                              fontWeight: 700,
-                              cursor: 'pointer',
+                              position: 'relative',
+                              height: '75px',
+                              borderRadius: '6px',
+                              overflow: 'hidden',
+                              border: '1px solid var(--border-subtle)',
+                              background: '#090d16',
                             }}
                           >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
+                            <img
+                              src={file.url}
+                              alt={file.name || ''}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setRetainedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                              title="Remove this image"
+                              style={{
+                                position: 'absolute',
+                                top: '3px',
+                                right: '3px',
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                background: '#ef4444',
+                                color: '#ffffff',
+                                border: 'none',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.6)',
+                              }}
+                            >
+                              ✕
+                            </button>
+                            <div
+                              style={{
+                                position: 'absolute',
+                                bottom: '0',
+                                insetInline: '0',
+                                background: 'rgba(0,0,0,0.7)',
+                                fontSize: '0.62rem',
+                                color: '#cbd5e1',
+                                textAlign: 'center',
+                                padding: '2px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              #{idx + 1}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+                  )}
+
+                  {/* 2. Newly Added Images to Upload */}
+                  {editImages.length > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <span style={{ fontSize: '0.74rem', color: '#34d399', display: 'block', marginBottom: '6px', fontWeight: 600 }}>
+                        + Newly Selected to Upload ({editImages.length}):
+                      </span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(85px, 1fr))', gap: '8px' }}>
+                        {editImages.map((file, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              position: 'relative',
+                              height: '75px',
+                              borderRadius: '6px',
+                              overflow: 'hidden',
+                              border: '1px solid #10b981',
+                              background: '#090d16',
+                            }}
+                          >
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt=""
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeSelectedImage(idx, true)}
+                              style={{
+                                position: 'absolute',
+                                top: '3px',
+                                right: '3px',
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                background: '#ef4444',
+                                color: '#ffffff',
+                                border: 'none',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Dropzone / Upload More (if slots remaining) */}
+                  {retainedFiles.length + editImages.length < MAX_IMAGES_COUNT ? (
+                    <div
+                      onClick={() => editImageInputRef.current?.click()}
+                      style={{
+                        border: '1px dashed var(--border-subtle)',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '14px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        transition: 'border-color 0.15s ease',
+                      }}
+                    >
+                      <input
+                        ref={editImageInputRef}
+                        type="file"
+                        multiple
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        onChange={(e) => handleImageFilesChange(e, true)}
+                        style={{ display: 'none' }}
+                      />
+                      <p style={{ color: '#818cf8', fontSize: '0.85rem', fontWeight: 600, margin: 0 }}>
+                        + Add {MAX_IMAGES_COUNT - (retainedFiles.length + editImages.length)} more image{MAX_IMAGES_COUNT - (retainedFiles.length + editImages.length) > 1 ? 's' : ''}
+                      </p>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        Click to browse local files (JPEG, PNG, WebP)
+                      </span>
+                    </div>
+                  ) : (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', textAlign: 'center', margin: '4px 0' }}>
+                      ✓ Maximum {MAX_IMAGES_COUNT} images reached. Remove an image above if you want to add another.
+                    </p>
+                  )}
+
+                  {/* Warning if 0 images */}
+                  {retainedFiles.length + editImages.length === 0 && (
+                    <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '8px', fontWeight: 600 }}>
+                      ⚠️ At least 1 image is required. Please upload or keep at least one image.
+                    </p>
                   )}
                 </div>
               ) : editingAsset.file_type === 'pdf' ? (

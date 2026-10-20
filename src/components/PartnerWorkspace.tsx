@@ -61,6 +61,8 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
   const [cardImageIndices, setCardImageIndices] = useState<Record<string, number>>({});
   const [lightboxData, setLightboxData] = useState<{ asset: Asset; index: number } | null>(null);
   const [downloadPromptAsset, setDownloadPromptAsset] = useState<Asset | null>(null);
+  const [expandedInstructions, setExpandedInstructions] = useState<Record<string, boolean>>({});
+
 
   // Modals
   const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null);
@@ -658,7 +660,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                   overflow: 'hidden',
                 }}
               >
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                   {/* Category & Type Pills Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <span
@@ -853,18 +855,53 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
 
                   {/* Usage Instructions (Internal note for reps) */}
                   {asset.description && (
-                    <p
-                      style={{
-                        fontSize: '0.82rem',
-                        color: 'var(--text-muted)',
-                        lineHeight: '1.45',
-                        marginBottom: '10px',
-                        whiteSpace: 'pre-line',
-                        fontStyle: 'italic',
-                      }}
-                    >
-                      💡 {asset.description}
-                    </p>
+                    <div style={{ marginBottom: '10px' }}>
+                      <p
+                        style={{
+                          fontSize: '0.82rem',
+                          color: 'var(--text-muted)',
+                          lineHeight: '1.45',
+                          margin: 0,
+                          fontStyle: 'italic',
+                          ...(expandedInstructions[asset.id]
+                            ? { whiteSpace: 'pre-line' }
+                            : {
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }),
+                        }}
+                      >
+                        💡 {asset.description}
+                      </p>
+                      {(asset.description.length > 80 || asset.description.includes('\n')) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedInstructions((prev) => ({
+                              ...prev,
+                              [asset.id]: !prev[asset.id],
+                            }))
+                          }
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#818cf8',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            padding: '3px 0 0 0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          {expandedInstructions[asset.id] ? 'Show less ▲' : 'Show full instructions ▼'}
+                        </button>
+                      )}
+                    </div>
                   )}
 
                   {/* 2. STYLED MONOSPACE BODY TEXT BOX WITH COPY BUTTON (ACROSS ALL TYPES) */}
@@ -878,7 +915,9 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                         borderRadius: 'var(--radius-sm)',
                         fontSize: '0.8rem',
                         color: '#cbd5e1',
-                        maxHeight: '130px',
+                        flex: asset.file_type === 'text' ? 1 : 'none',
+                        minHeight: asset.file_type === 'text' ? '180px' : 'auto',
+                        maxHeight: asset.file_type === 'text' ? '300px' : '110px',
                         overflowY: 'auto',
                         whiteSpace: 'pre-wrap',
                         fontFamily: 'monospace',
