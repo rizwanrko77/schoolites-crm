@@ -1,0 +1,132 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getSessionUser } from '@/lib/auth';
+import { sql } from '@/lib/db';
+
+export async function GET(req: NextRequest) {
+  try {
+    const currentUser = await getSessionUser();
+    if (!currentUser || currentUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const roleFilter = searchParams.get('role');
+    const search = searchParams.get('search')?.toLowerCase() || '';
+
+    // Fetch users list
+    let users = await sql`
+      SELECT id, user_code, name, email, role, date_of_joining, description, is_active, created_at
+      FROM users
+      ORDER BY created_at DESC
+    `;
+
+    // Calculate aggregated metrics
+    const counts = {
+      total: users.length,
+      active: users.filter((u: any) => u.is_active).length,
+      admin: users.filter((u: any) => u.role === 'admin').length,
+      pre_sales: users.filter((u: any) => u.role === 'pre_sales').length,
+      referral: users.filter((u: any) => u.role === 'referral').length,
+      business_relations: users.filter((u: any) => u.role === 'business_relations').length,
+    };
+
+    // Apply filters if requested
+    if (roleFilter && roleFilter !== 'all') {
+      users = users.filter((u: any) => u.role === roleFilter);
+    }
+
+    if (search) {
+      users = users.filter(
+        (u: any) =>
+          u.name.toLowerCase().includes(search) ||
+          u.email.toLowerCase().includes(search) ||
+          u.user_code.toLowerCase().includes(search)
+      );
+    }
+
+    return NextResponse.json({ users, counts });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to fetch users' }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const currentUser = await getSessionUser();
+    if (!currentUser || currentUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { name, email, role, date_of_joining, description } = body;
+
+    if (!name || !name.trim()) {
+      return NextResponse.json({ error: 'User name is required.' }, { status: 400 });
+    }
+
+    if (!email || !email.trim()) {
+      return NextResponse.json({ error: 'Valid email address is required.' }, { status: 400 });
+    }
+
+    const validRoles = ['admin', 'pre_sales', 'referral', 'business_relations'];
+    if (!validRoles.includes(role)) {
+      return NextResponse.json({ error: 'Invalid role selected.' }, { status: 400 });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Check if email already in use
+    const existing = await sql`
+      SELECT id, user_code FROM users WHERE LOWER(email) = ${normalizedEmail} LIMIT 1
+    `;
+    if (existing.length > 0) {
+      return NextResponse.json(
+        { error: `A user with email ${email} already exists (Code: ${existing[0].user_code}).` },
+        { status: 400 }
+      );
+    }
+
+    // Determine Role prefix
+    const rolePrefixes: Record<string, string> = {
+      admin: 'ADM',
+      pre_sales: 'PS',
+      referral: 'REF',
+      business_relations: 'BR',
+    };
+    const prefix = rolePrefixes[role] || 'USR';
+
+    // Fetch next value from shared sequence
+    const seqRes = await sql`SELECT nextval('user_code_seq') as next_val`;
+    const userCode = `${prefix}-${seqRes[0].next_val}`;
+
+    const doj = date_of_joining ? date_of_joining : new Date().toISOString().split('T')[0];
+
+    // Insert new user
+    const insertRes = await sql`
+      INSERT INTO users (user_code, name, email, role, date_of_joining, description, is_active)
+      VALUES (${userCode}, ${name.trim()}, ${normalizedEmail}, ${role}, ${doj}, ${description?.trim() || null}, TRUE)
+      RETURNING id, user_code, name, email, role, date_of_joining, description, is_active, created_at
+    `;
+
+    const newUser = insertRes[0];
+
+    // Audit log insertion
+    try {
+      await sql`
+        INSERT INTO audit_logs (record_type, record_id, actor_id, actor_name, action, metadata)
+        VALUES ('user', ${newUser.id}, ${currentUser.id}, ${currentUser.name}, 'user_created', ${JSON.stringify({
+          user_code: newUser.user_code,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+        })})
+      `;
+    } catch (auditErr) {
+      console.warn('Failed to write audit log for user creation:', auditErr);
+    }
+
+    return NextResponse.json({ success: true, user: newUser });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to create user' }, { status: 500 });
+  }
+}
