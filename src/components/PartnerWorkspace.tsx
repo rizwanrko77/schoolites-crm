@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import CreateLeadModal from '@/components/CreateLeadModal';
 import LeadDetailModal from '@/components/LeadDetailModal';
+import ActorShell, { NavItem } from '@/components/ActorShell';
 
 interface Enquiry {
   id: string;
@@ -228,68 +229,105 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
     lost: '#f87171',
   };
 
+  const navItems: NavItem[] = [
+    {
+      id: 'assets',
+      label: 'Marketing Assets',
+      icon: '📁',
+      badge: assets.length > 0 ? assets.length : undefined,
+      isActive: activeTab === 'assets',
+      onClick: () => setActiveTab('assets'),
+    },
+    {
+      id: 'enquiries',
+      label: 'Inbound Enquiries',
+      icon: '📥',
+      badge: enquiries.length > 0 ? enquiries.length : undefined,
+      isActive: activeTab === 'enquiries',
+      onClick: () => setActiveTab('enquiries'),
+    },
+    {
+      id: 'leads',
+      label: 'My Generated Leads',
+      icon: '🎯',
+      badge: myLeads.length > 0 ? myLeads.length : undefined,
+      isActive: activeTab === 'leads',
+      onClick: () => setActiveTab('leads'),
+    },
+  ];
+
+  const activeTabTitles: Record<string, string> = {
+    assets: 'Marketing Assets Hub',
+    enquiries: 'Inbound Enquiries',
+    leads: 'My Generated Leads',
+  };
+
   return (
-    <div style={{ minHeight: '100vh', padding: '36px 32px', maxWidth: '1240px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      {/* Toast Alert */}
-      {toastMsg && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            right: '24px',
-            zIndex: 9999,
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            color: '#ffffff',
-            padding: '12px 20px',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            animation: 'fadeIn 0.2s ease',
-          }}
-        >
-          <span>✓</span>
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
-      {/* Header bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <span className={`badge-role ${roleBadgeClass}`}>{roleTitle}</span>
-            <span className="user-code-pill" style={{ color: roleColor }}>{user?.user_code}</span>
-          </div>
-          <h1 style={{ fontSize: '1.85rem', fontWeight: 800 }}>Welcome, {user?.name}</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem' }}>{user?.email}</p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
+    <ActorShell
+      user={user}
+      roleTitle={roleTitle}
+      roleBadgeClass={roleBadgeClass}
+      roleColor={roleColor}
+      navItems={navItems}
+      activeTabTitle={activeTabTitles[activeTab]}
+      headerActions={
+        <>
+          <button
+            onClick={() => copyToClipboard(publicLink, 'your unique referral link')}
+            className="btn-secondary"
+            style={{ padding: '7px 14px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            title="Copy your unique public referral link"
+          >
+            <span>🔗</span>
+            <span>Copy Link</span>
+          </button>
           <button
             onClick={() => {
               setEnquiryToConvert(null);
               setIsLeadModalOpen(true);
             }}
             className="btn-primary"
-            style={{ padding: '10px 18px', fontSize: '0.88rem' }}
+            style={{ padding: '7px 16px', fontSize: '0.84rem' }}
           >
             + Create Lead
           </button>
-          <button
-            onClick={async () => {
-              await fetch('/api/auth/logout', { method: 'POST' });
-              router.push('/login');
+        </>
+      }
+    >
+      <div style={{ minHeight: '100%', padding: '28px 36px', maxWidth: '1360px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* Toast Alert */}
+        {toastMsg && (
+          <div
+            style={{
+              position: 'fixed',
+              top: '80px',
+              right: '24px',
+              zIndex: 9999,
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#ffffff',
+              padding: '12px 20px',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              animation: 'fadeIn 0.2s ease',
             }}
-            className="btn-secondary"
-            style={{ fontSize: '0.88rem' }}
           >
-            Sign Out ⎋
-          </button>
+            <span>✓</span>
+            <span>{toastMsg}</span>
+          </div>
+        )}
+
+        {/* Hero Banner */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Welcome, {user?.name}</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem' }}>{user?.email}</p>
+          </div>
         </div>
-      </div>
 
       {/* UNIQUE SHAREABLE REFERRAL LINK BANNER */}
       <div
@@ -1356,5 +1394,6 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
         </div>
       )}
     </div>
+  </ActorShell>
   );
 }

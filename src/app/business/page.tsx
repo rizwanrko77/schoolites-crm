@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import CreateLeadModal from '@/components/CreateLeadModal';
 import LeadDetailModal from '@/components/LeadDetailModal';
+import ActorShell, { NavItem } from '@/components/ActorShell';
 
 interface Lead {
   id: string;
@@ -135,73 +136,98 @@ export default function BusinessRelationsPage() {
     lost: '#f87171',
   };
 
+  const navItems: NavItem[] = [
+    {
+      id: 'unassigned',
+      label: 'Unassigned Pool',
+      icon: '⚡',
+      badge: leads.filter((l) => l.status === 'unassigned').length || undefined,
+      isActive: activeTab === 'unassigned',
+      onClick: () => setActiveTab('unassigned'),
+    },
+    {
+      id: 'my',
+      label: 'My Opportunities',
+      icon: '🎯',
+      badge: leads.filter((l) => l.manager_name && l.manager_name === user?.name).length || undefined,
+      isActive: activeTab === 'my',
+      onClick: () => setActiveTab('my'),
+    },
+    {
+      id: 'all',
+      label: 'All Leads Directory',
+      icon: '🌐',
+      isActive: activeTab === 'all',
+      onClick: () => setActiveTab('all'),
+    },
+  ];
+
+  const activeTabLabels: Record<string, string> = {
+    unassigned: 'Unassigned Pool',
+    my: 'My Active Opportunities',
+    all: 'All Leads Directory',
+  };
+
   return (
-    <div style={{ minHeight: '100vh', padding: '36px 32px', maxWidth: '1280px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      {/* Toast Alert */}
-      {toastMsg && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            right: '24px',
-            zIndex: 9999,
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            color: '#ffffff',
-            padding: '12px 20px',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            animation: 'fadeIn 0.2s ease',
-          }}
+    <ActorShell
+      user={user}
+      roleTitle="Business Relations Portal"
+      roleBadgeClass="business_relations"
+      roleColor="var(--role-business-color)"
+      navItems={navItems}
+      activeTabTitle={activeTabLabels[activeTab]}
+      headerActions={
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="btn-primary"
+          style={{ padding: '8px 16px', fontSize: '0.86rem' }}
         >
-          <span>✓</span>
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <span className="badge-role business_relations">Business Relations Portal</span>
-            <span className="user-code-pill" style={{ color: 'var(--role-business-color)' }}>{user?.user_code}</span>
-          </div>
-          <h1 style={{ fontSize: '1.85rem', fontWeight: 800 }}>Welcome, {user?.name}</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem' }}>
-            Work the unassigned pool, manage active opportunities, and drive institutional closures
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="btn-primary"
-            style={{ padding: '10px 20px', fontSize: '0.9rem' }}
-          >
-            + Create New Lead
-          </button>
-          <button
-            onClick={async () => {
-              await fetch('/api/auth/logout', { method: 'POST' });
-              router.push('/login');
+          + Create Lead
+        </button>
+      }
+    >
+      <div style={{ minHeight: '100%', padding: '28px 36px', maxWidth: '1360px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* Toast Alert */}
+        {toastMsg && (
+          <div
+            style={{
+              position: 'fixed',
+              top: '80px',
+              right: '24px',
+              zIndex: 9999,
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#ffffff',
+              padding: '12px 20px',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              animation: 'fadeIn 0.2s ease',
             }}
-            className="btn-secondary"
-            style={{ fontSize: '0.88rem' }}
           >
-            Sign Out ⎋
-          </button>
-        </div>
-      </div>
+            <span>✓</span>
+            <span>{toastMsg}</span>
+          </div>
+        )}
 
-      {/* Primary Tab Navigation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={() => setActiveTab('unassigned')}
+        {/* Hero Banner */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Welcome, {user?.name}</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem' }}>
+              Work the unassigned pool, manage active opportunities, and drive institutional closures
+            </p>
+          </div>
+        </div>
+
+        {/* Primary Tab Navigation */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => setActiveTab('unassigned')}
             style={{
               padding: '10px 20px',
               borderRadius: 'var(--radius-md)',
@@ -458,5 +484,6 @@ export default function BusinessRelationsPage() {
         availableManagers={availableManagers}
       />
     </div>
+  </ActorShell>
   );
 }
