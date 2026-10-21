@@ -153,6 +153,10 @@ graph TD
     * Row 2: Mobile / WhatsApp | Email Address
   * Mobile view (< 640px) seamlessly collapses into a clean 1-column stack (1 field per row).
   * Designations are completely un-prefilled (`''`) with descriptive placeholders and `autoComplete="off"`.
+  * **Zero Pre-filled Fields Policy (Country Preserved as India):**
+    * All select dropdowns (`institute_type`, `student_strength`, `current_erp`, `preferred_slot_mode`, `expected_start_date`) default to empty unselected prompt options (`-- Select ... --`).
+    * `preferred_slot_time` defaults to empty (`''`) with a placeholder prompt (`e.g. 11:30 AM or 3:00 PM`).
+    * `Country` retains its preset default to `India` per user requirement with searchable dropdown support.
   * Admin Form Configurator (`/admin/forms` & `form_field_configs` table) synchronized with all 25 lead fields including `additional_contact_*` and `expected_start_date`.
 
 ---

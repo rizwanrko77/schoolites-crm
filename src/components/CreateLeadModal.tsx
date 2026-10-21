@@ -22,11 +22,11 @@ export const EXPECTED_START_OPTIONS = [
 ];
 
 function mapStudentStrength(val: string | number | null | undefined): string {
-  if (!val) return '500 - 1000';
+  if (!val) return '';
   const str = String(val).trim();
   if (STUDENT_STRENGTH_OPTIONS.includes(str)) return str;
   const num = parseInt(str.replace(/[^0-9]/g, ''), 10);
-  if (isNaN(num)) return '500 - 1000';
+  if (isNaN(num)) return '';
   if (num < 500) return 'Below 500';
   if (num <= 1000) return '500 - 1000';
   if (num <= 2000) return '1000 - 2000';
@@ -49,12 +49,12 @@ export default function CreateLeadModal({
   initialEnquiry,
 }: CreateLeadModalProps) {
   const [formData, setFormData] = useState<any>({
-    institute_type: 'School',
+    institute_type: '',
     institute_name: '',
     country: 'India',
     city: '',
-    student_strength: '500 - 1000',
-    current_erp: 'unsure',
+    student_strength: '',
+    current_erp: '',
     current_erp_name: '',
     spoc_name: '',
     spoc_role: '',
@@ -71,9 +71,9 @@ export default function CreateLeadModal({
     additional_contact_email: '',
     decision_flow: '',
     preferred_slot_date: '',
-    preferred_slot_time: '11:00 AM',
-    preferred_slot_mode: 'Phone/WhatsApp Call',
-    expected_start_date: 'Within 1 Month',
+    preferred_slot_time: '',
+    preferred_slot_mode: '',
+    expected_start_date: '',
     additional_details: '',
   });
 
@@ -82,7 +82,7 @@ export default function CreateLeadModal({
   const [showAdditionalContact, setShowAdditionalContact] = useState(false);
 
   // Expected Start Date Hybrid State
-  const [startPreset, setStartPreset] = useState('Within 1 Month');
+  const [startPreset, setStartPreset] = useState('');
   const [customStartDate, setCustomStartDate] = useState('');
 
   const handleStartPresetChange = (preset: string) => {
@@ -180,12 +180,12 @@ export default function CreateLeadModal({
 
     if (initialEnquiry) {
       setFormData({
-        institute_type: initialEnquiry.institute_type || 'School',
+        institute_type: initialEnquiry.institute_type || '',
         institute_name: initialEnquiry.institute_name || '',
         country: initialEnquiry.country || 'India',
         city: initialEnquiry.city || '',
-        student_strength: mapStudentStrength(initialEnquiry.student_count),
-        current_erp: 'unsure',
+        student_strength: initialEnquiry.student_count ? mapStudentStrength(initialEnquiry.student_count) : '',
+        current_erp: '',
         current_erp_name: '',
         spoc_name: initialEnquiry.spoc_name || '',
         spoc_role: '',
@@ -202,22 +202,24 @@ export default function CreateLeadModal({
         additional_contact_email: '',
         decision_flow: '',
         preferred_slot_date: '',
-        preferred_slot_time: '11:00 AM',
-        preferred_slot_mode: 'Phone/WhatsApp Call',
-        expected_start_date: 'Within 1 Month',
+        preferred_slot_time: '',
+        preferred_slot_mode: '',
+        expected_start_date: '',
         additional_details: initialEnquiry.message ? `Requirements from Enquiry: ${initialEnquiry.message}` : '',
         source_enquiry_id: initialEnquiry.id,
       });
+      setStartPreset('');
+      setCustomStartDate('');
       setShowAdditionalContact(false);
       setError('');
     } else {
       setFormData({
-        institute_type: 'School',
+        institute_type: '',
         institute_name: '',
         country: 'India',
         city: '',
-        student_strength: '500 - 1000',
-        current_erp: 'unsure',
+        student_strength: '',
+        current_erp: '',
         current_erp_name: '',
         spoc_name: '',
         spoc_role: '',
@@ -234,11 +236,13 @@ export default function CreateLeadModal({
         additional_contact_email: '',
         decision_flow: '',
         preferred_slot_date: '',
-        preferred_slot_time: '11:00 AM',
-        preferred_slot_mode: 'Phone/WhatsApp Call',
-        expected_start_date: 'Within 1 Month',
+        preferred_slot_time: '',
+        preferred_slot_mode: '',
+        expected_start_date: '',
         additional_details: '',
       });
+      setStartPreset('');
+      setCustomStartDate('');
       setShowAdditionalContact(false);
       setError('');
     }
@@ -358,6 +362,7 @@ export default function CreateLeadModal({
                     style={{ background: '#0f172a' }}
                     required={isRequired('institute_type', true)}
                   >
+                    <option value="">-- Select Institute Type --</option>
                     <option value="School">School</option>
                     <option value="College">College</option>
                     <option value="Institution">Institution</option>
@@ -506,6 +511,7 @@ export default function CreateLeadModal({
                     style={{ background: '#0f172a' }}
                     required={isRequired('student_strength', true)}
                   >
+                    <option value="">-- Select Student Strength --</option>
                     {STUDENT_STRENGTH_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
                         {opt}
@@ -525,7 +531,9 @@ export default function CreateLeadModal({
                     onChange={(e) => setFormData({ ...formData, current_erp: e.target.value })}
                     className="input-field"
                     style={{ background: '#0f172a' }}
+                    required={isRequired('current_erp', true)}
                   >
+                    <option value="">-- Select Current ERP Status --</option>
                     <option value="yes">YES (Active System)</option>
                     <option value="no">NO (None)</option>
                     <option value="unsure">Unsure</option>
@@ -922,6 +930,7 @@ export default function CreateLeadModal({
                       style={{ background: '#0f172a' }}
                       required={isRequired('preferred_slot_mode', false)}
                     >
+                      <option value="">-- Select Preferred Mode --</option>
                       <option value="Phone/WhatsApp Call">Phone/WhatsApp Call</option>
                       <option value="Virtual Meet">Virtual Meet</option>
                       <option value="Unsure">Unsure</option>
@@ -944,6 +953,7 @@ export default function CreateLeadModal({
                       style={{ background: '#0f172a' }}
                       required={isRequired('expected_start_date', false)}
                     >
+                      <option value="">-- Select Expected Start Date --</option>
                       {EXPECTED_START_OPTIONS.map((opt) => (
                         <option key={opt} value={opt}>
                           {opt}
