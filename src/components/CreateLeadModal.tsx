@@ -51,7 +51,7 @@ export default function CreateLeadModal({
     spoc_role: 'Principal / Admin Head',
     spoc_phone: '',
     spoc_email: '',
-    dm_same_as_spoc: true,
+    dm_same_as_spoc: false,
     dm_name: '',
     dm_role: 'Principal / Management',
     dm_phone: '',
