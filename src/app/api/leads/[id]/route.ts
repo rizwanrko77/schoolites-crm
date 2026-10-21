@@ -89,7 +89,7 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await req.json();
-    const { status, deal_value, decision_flow, preferred_slot_date, preferred_slot_time, preferred_slot_mode, additional_details } = body;
+    const { status, deal_value, decision_flow, preferred_slot_date, preferred_slot_time, preferred_slot_mode, expected_start_date, additional_details } = body;
 
     const existingRes = await sql`SELECT id, lead_code, status, deal_value, manager_id, owner_id FROM leads WHERE id = ${id} LIMIT 1`;
     if (existingRes.length === 0) {
@@ -112,6 +112,7 @@ export async function PATCH(
         preferred_slot_date = COALESCE(${preferred_slot_date ?? null}, preferred_slot_date),
         preferred_slot_time = COALESCE(${preferred_slot_time ?? null}, preferred_slot_time),
         preferred_slot_mode = COALESCE(${preferred_slot_mode ?? null}, preferred_slot_mode),
+        expected_start_date = COALESCE(${expected_start_date ?? null}, expected_start_date),
         additional_details = COALESCE(${additional_details ?? null}, additional_details),
         updated_at = NOW()
       WHERE id = ${id}

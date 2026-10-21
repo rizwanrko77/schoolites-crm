@@ -378,7 +378,7 @@ export default function LeadDetailModal({
                   </div>
 
                   {/* ERP & Size */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '14px' }}>
                     <div style={{ padding: '12px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-sm)' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Student Strength</span>
                       <strong>{lead?.student_strength || '—'}</strong>
@@ -390,9 +390,16 @@ export default function LeadDetailModal({
                     </div>
 
                     <div style={{ padding: '12px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-sm)' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Expected Deal Value</span>
-                      <strong style={{ color: '#34d399' }}>₹ {Number(lead?.deal_value || 0).toLocaleString('en-IN')}</strong>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Expected Start</span>
+                      <strong style={{ color: '#38bdf8' }}>{lead?.expected_start_date || 'Within 1 Month'}</strong>
                     </div>
+
+                    {Number(lead?.deal_value || 0) > 0 && (
+                      <div style={{ padding: '12px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-sm)' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Deal Value</span>
+                        <strong style={{ color: '#34d399' }}>₹ {Number(lead?.deal_value || 0).toLocaleString('en-IN')}</strong>
+                      </div>
+                    )}
                   </div>
 
                   {/* Connect Slot */}

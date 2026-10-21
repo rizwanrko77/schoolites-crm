@@ -71,11 +71,13 @@ graph TD
 * **Institute Info:** Type\*, Name\*, Country\* (Searchable dropdown with auto-filter, default India, excludes Pakistan), City\*, Student Strength\* (Dropdown brackets: Below 500, 500 - 1000, 1000 - 2000, 2000 - 3000, 3000 - 4000, 4000+), Current ERP\* (Yes / No / Unsure - if yes, which one)
 * **Contact Details:**
   * **SPOC\*:** Name, Role/Designation, Mobile/WhatsApp, Email
-  * **Decision Maker\*:** Name, Role/Designation, Mobile/WhatsApp, Email (checkbox to copy SPOC)
+  * **Decision Maker\*:** Name, Role/Designation, Mobile/WhatsApp, Email (checkbox to copy SPOC, unchecked by default)
   * **Additional Contact:** ERP Admin / IT Head info
-* **Decision Flow:** Multiline text input
-* **Preferred Connect Slot:** Date, Time, Mode (Phone/WhatsApp Call [default] / Virtual Meet / Unsure)
-* **Additional Details**
+* **Decision Flow & Connect Slot:**
+  * Preferred Slot Date, Time, Mode (Phone/WhatsApp Call [default] / Virtual Meet / Unsure)
+  * **Expected Start Date:** Hybrid timeline selector (Immediately [1-2 weeks], Within 1 Month, Within 2-3 Months, Next Academic Session, Flexible / Exploring, or Specific Date picker)
+  * Decision Flow: Multiline text input
+  * Additional Notes: Multiline text input
 
 ---
 

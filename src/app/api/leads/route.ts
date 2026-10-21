@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
              l.spoc_name, l.spoc_role, l.spoc_phone, l.spoc_email,
              l.dm_same_as_spoc, l.dm_name, l.dm_role, l.dm_phone, l.dm_email,
              l.additional_contact_name, l.additional_contact_role, l.additional_contact_phone, l.additional_contact_email,
-             l.decision_flow, l.preferred_slot_date, l.preferred_slot_time, l.preferred_slot_mode, l.additional_details,
+             l.decision_flow, l.preferred_slot_date, l.preferred_slot_time, l.preferred_slot_mode, l.expected_start_date, l.additional_details,
              l.status, l.deal_value, l.is_duplicate, l.duplicate_of_lead_id, l.duplicate_flag_cleared,
              l.created_at, l.updated_at,
              u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
       preferred_slot_date,
       preferred_slot_time,
       preferred_slot_mode,
+      expected_start_date,
       additional_details,
       deal_value,
       source_enquiry_id,
@@ -179,7 +180,7 @@ export async function POST(req: NextRequest) {
         spoc_name, spoc_role, spoc_phone, spoc_email,
         dm_same_as_spoc, dm_name, dm_role, dm_phone, dm_email,
         additional_contact_name, additional_contact_role, additional_contact_phone, additional_contact_email,
-        decision_flow, preferred_slot_date, preferred_slot_time, preferred_slot_mode, additional_details,
+        decision_flow, preferred_slot_date, preferred_slot_time, preferred_slot_mode, expected_start_date, additional_details,
         status, deal_value, is_duplicate, duplicate_of_lead_id
       ) VALUES (
         ${leadCode}, ${user.id}, ${initialManagerId}, ${source_enquiry_id || null},
@@ -188,7 +189,7 @@ export async function POST(req: NextRequest) {
         ${spoc_name.trim()}, ${spoc_role || 'SPOC'}, ${cleanSpocPhone}, ${normalizedSpocEmail},
         ${Boolean(dm_same_as_spoc)}, ${finalDmName.trim()}, ${finalDmRole || 'Principal'}, ${finalDmPhone}, ${finalDmEmail},
         ${additional_contact_name || null}, ${additional_contact_role || null}, ${additional_contact_phone || null}, ${additional_contact_email || null},
-        ${decision_flow || null}, ${preferred_slot_date || null}, ${preferred_slot_time || null}, ${finalSlotMode}, ${additional_details || null},
+        ${decision_flow || null}, ${preferred_slot_date || null}, ${preferred_slot_time || null}, ${finalSlotMode}, ${expected_start_date || null}, ${additional_details || null},
         ${initialStatus}, ${deal_value ? parseFloat(deal_value) : 0.00}, ${isDuplicate}, ${duplicateOfLeadId}
       )
       RETURNING *

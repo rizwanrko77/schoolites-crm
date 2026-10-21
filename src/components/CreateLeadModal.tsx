@@ -12,6 +12,15 @@ const STUDENT_STRENGTH_OPTIONS = [
   '4000+',
 ];
 
+export const EXPECTED_START_OPTIONS = [
+  'Immediately (Within 1-2 weeks)',
+  'Within 1 Month',
+  'Within 2-3 Months',
+  'Next Academic Session',
+  'Flexible / Exploring',
+  'Specific Date...',
+];
+
 function mapStudentStrength(val: string | number | null | undefined): string {
   if (!val) return '500 - 1000';
   const str = String(val).trim();
@@ -64,12 +73,30 @@ export default function CreateLeadModal({
     preferred_slot_date: '',
     preferred_slot_time: '11:00 AM',
     preferred_slot_mode: 'Phone/WhatsApp Call',
-    deal_value: '',
+    expected_start_date: 'Within 1 Month',
     additional_details: '',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Expected Start Date Hybrid State
+  const [startPreset, setStartPreset] = useState('Within 1 Month');
+  const [customStartDate, setCustomStartDate] = useState('');
+
+  const handleStartPresetChange = (preset: string) => {
+    setStartPreset(preset);
+    if (preset === 'Specific Date...') {
+      setFormData((prev: any) => ({ ...prev, expected_start_date: customStartDate || '' }));
+    } else {
+      setFormData((prev: any) => ({ ...prev, expected_start_date: preset }));
+    }
+  };
+
+  const handleCustomDateChange = (dateVal: string) => {
+    setCustomStartDate(dateVal);
+    setFormData((prev: any) => ({ ...prev, expected_start_date: dateVal }));
+  };
 
   // Searchable Country Dropdown State
   const [isCountryOpen, setIsCountryOpen] = useState(false);
@@ -613,15 +640,36 @@ export default function CreateLeadModal({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Expected Deal Value (₹ INR)
+                  Expected Start Date
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '6px' }}>
+                    (How early/late ERP in use)
+                  </span>
                 </label>
-                <input
-                  type="number"
-                  placeholder="e.g. 150000"
-                  value={formData.deal_value}
-                  onChange={(e) => setFormData({ ...formData, deal_value: e.target.value })}
+                <select
+                  value={startPreset}
+                  onChange={(e) => handleStartPresetChange(e.target.value)}
                   className="input-field"
-                />
+                  style={{ background: '#0f172a' }}
+                >
+                  {EXPECTED_START_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+
+                {startPreset === 'Specific Date...' && (
+                  <div style={{ marginTop: '8px', animation: 'fadeIn 0.15s ease' }}>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => handleCustomDateChange(e.target.value)}
+                      className="input-field"
+                      style={{ colorScheme: 'dark', background: '#0f172a' }}
+                      required={startPreset === 'Specific Date...'}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
