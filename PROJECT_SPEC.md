@@ -157,6 +157,15 @@ graph TD
     * All select dropdowns (`institute_type`, `student_strength`, `current_erp`, `preferred_slot_mode`, `expected_start_date`) default to empty unselected prompt options (`-- Select ... --`).
     * `preferred_slot_time` defaults to empty (`''`) with a placeholder prompt (`e.g. 11:30 AM or 3:00 PM`).
     * `Country` retains its preset default to `India` per user requirement with searchable dropdown support.
+  * **Lead Form Draft Persistence (`localStorage`):**
+    * In-progress lead details auto-save to browser `localStorage` (`schoolites_lead_form_draft`).
+    * If a user closes the modal accidentally or refreshes the page, reopening the modal automatically restores all entered details, presets, and additional contacts.
+    * Automatically purges draft upon successful lead submission.
+    * Inbound enquiry conversions prioritize enquiry attributes over manual drafts.
+  * **Two-Stage Clear Form Action:**
+    * Modal header features a `Clear Form` button (`id="clear-lead-form-btn"`) beside the close (`✕`) button.
+    * Implements a safe, non-blocking 2-stage inline confirmation (`Clear Form` -> `⚠️ Confirm Clear?`) that auto-reverts after 4 seconds to prevent accidental data loss.
+    * Completely purges the local draft and resets all fields back to blank defaults (`Country: India`).
   * Admin Form Configurator (`/admin/forms` & `form_field_configs` table) synchronized with all 25 lead fields including `additional_contact_*` and `expected_start_date`.
 
 ---

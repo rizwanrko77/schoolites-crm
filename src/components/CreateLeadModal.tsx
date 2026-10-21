@@ -42,44 +42,49 @@ interface CreateLeadModalProps {
   initialEnquiry?: any | null;
 }
 
+const DRAFT_STORAGE_KEY = 'schoolites_lead_form_draft';
+
+const INITIAL_BLANK_LEAD_FORM = {
+  institute_type: '',
+  institute_name: '',
+  country: 'India',
+  city: '',
+  student_strength: '',
+  current_erp: '',
+  current_erp_name: '',
+  spoc_name: '',
+  spoc_role: '',
+  spoc_phone: '',
+  spoc_email: '',
+  dm_same_as_spoc: false,
+  dm_name: '',
+  dm_role: '',
+  dm_phone: '',
+  dm_email: '',
+  additional_contact_name: '',
+  additional_contact_role: '',
+  additional_contact_phone: '',
+  additional_contact_email: '',
+  decision_flow: '',
+  preferred_slot_date: '',
+  preferred_slot_time: '',
+  preferred_slot_mode: '',
+  expected_start_date: '',
+  additional_details: '',
+};
+
 export default function CreateLeadModal({
   isOpen,
   onClose,
   onSuccess,
   initialEnquiry,
 }: CreateLeadModalProps) {
-  const [formData, setFormData] = useState<any>({
-    institute_type: '',
-    institute_name: '',
-    country: 'India',
-    city: '',
-    student_strength: '',
-    current_erp: '',
-    current_erp_name: '',
-    spoc_name: '',
-    spoc_role: '',
-    spoc_phone: '',
-    spoc_email: '',
-    dm_same_as_spoc: false,
-    dm_name: '',
-    dm_role: '',
-    dm_phone: '',
-    dm_email: '',
-    additional_contact_name: '',
-    additional_contact_role: '',
-    additional_contact_phone: '',
-    additional_contact_email: '',
-    decision_flow: '',
-    preferred_slot_date: '',
-    preferred_slot_time: '',
-    preferred_slot_mode: '',
-    expected_start_date: '',
-    additional_details: '',
-  });
+  const [formData, setFormData] = useState<any>(INITIAL_BLANK_LEAD_FORM);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showAdditionalContact, setShowAdditionalContact] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   // Expected Start Date Hybrid State
   const [startPreset, setStartPreset] = useState('');
@@ -174,12 +179,13 @@ export default function CreateLeadModal({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Reset or pre-fill form when modal opens or initialEnquiry changes
+  // Reset or pre-fill form when modal opens or initialEnquiry changes (with draft restoration)
   useEffect(() => {
     if (!isOpen) return;
 
     if (initialEnquiry) {
       setFormData({
+        ...INITIAL_BLANK_LEAD_FORM,
         institute_type: initialEnquiry.institute_type || '',
         institute_name: initialEnquiry.institute_name || '',
         country: initialEnquiry.country || 'India',
@@ -213,40 +219,93 @@ export default function CreateLeadModal({
       setShowAdditionalContact(false);
       setError('');
     } else {
-      setFormData({
-        institute_type: '',
-        institute_name: '',
-        country: 'India',
-        city: '',
-        student_strength: '',
-        current_erp: '',
-        current_erp_name: '',
-        spoc_name: '',
-        spoc_role: '',
-        spoc_phone: '',
-        spoc_email: '',
-        dm_same_as_spoc: false,
-        dm_name: '',
-        dm_role: '',
-        dm_phone: '',
-        dm_email: '',
-        additional_contact_name: '',
-        additional_contact_role: '',
-        additional_contact_phone: '',
-        additional_contact_email: '',
-        decision_flow: '',
-        preferred_slot_date: '',
-        preferred_slot_time: '',
-        preferred_slot_mode: '',
-        expected_start_date: '',
-        additional_details: '',
-      });
-      setStartPreset('');
-      setCustomStartDate('');
-      setShowAdditionalContact(false);
+      // Check for previously saved local draft in browser
+      let restoredFromDraft = false;
+      try {
+        const saved = typeof window !== 'undefined' ? localStorage.getItem(DRAFT_STORAGE_KEY) : null;
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.formData) {
+            setFormData({
+              ...INITIAL_BLANK_LEAD_FORM,
+              ...parsed.formData,
+              country: parsed.formData.country || 'India',
+            });
+            if (parsed.startPreset !== undefined) setStartPreset(parsed.startPreset);
+            if (parsed.customStartDate !== undefined) setCustomStartDate(parsed.customStartDate);
+            if (parsed.showAdditionalContact !== undefined) setShowAdditionalContact(Boolean(parsed.showAdditionalContact));
+            restoredFromDraft = true;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not restore lead draft from localStorage:', err);
+      }
+
+      if (!restoredFromDraft) {
+        setFormData(INITIAL_BLANK_LEAD_FORM);
+        setStartPreset('');
+        setCustomStartDate('');
+        setShowAdditionalContact(false);
+      }
       setError('');
     }
   }, [isOpen, initialEnquiry]);
+
+  // Auto-save form draft to localStorage whenever fields change (for fresh leads, not inbound conversions)
+  useEffect(() => {
+    if (!isOpen || initialEnquiry) return;
+
+    // Check if any field differs from blank defaults
+    const hasData = Object.keys(formData).some((k) => {
+      if (k === 'country') return false; // India is the preset default
+      return Boolean(formData[k]);
+    }) || Boolean(customStartDate) || showAdditionalContact;
+
+    if (hasData) {
+      try {
+        localStorage.setItem(
+          DRAFT_STORAGE_KEY,
+          JSON.stringify({
+            formData,
+            startPreset,
+            customStartDate,
+            showAdditionalContact,
+          })
+        );
+      } catch (e) {
+        console.warn('Failed to auto-save lead draft to localStorage', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch (e) {}
+    }
+  }, [formData, startPreset, customStartDate, showAdditionalContact, isOpen, initialEnquiry]);
+
+  // Auto-revert clear confirmation after 4 seconds
+  useEffect(() => {
+    if (confirmClear) {
+      const timer = setTimeout(() => setConfirmClear(false), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [confirmClear]);
+
+  // Clear all entered details with 2-stage inline confirmation
+  const handleClearForm = () => {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    setConfirmClear(false);
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch (e) {}
+    setFormData(INITIAL_BLANK_LEAD_FORM);
+    setStartPreset('');
+    setCustomStartDate('');
+    setShowAdditionalContact(false);
+    setError('');
+  };
 
 
   if (!isOpen) return null;
@@ -301,6 +360,10 @@ export default function CreateLeadModal({
         throw new Error(data.error || 'Failed to create lead.');
       }
 
+      try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch (e) {}
+
       onSuccess(data.lead, data.duplicate_warning);
       onClose();
     } catch (err: any) {
@@ -314,16 +377,67 @@ export default function CreateLeadModal({
     <div className="modal-backdrop">
       <div className="glass-panel modal-dialog">
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '24px' }}>
           <div>
             <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Create New Pipeline Lead</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
               {initialEnquiry ? `Converting from Enquiry ${initialEnquiry.enquiry_code}` : 'Register a qualified school/institution into the active pipeline'}
             </p>
           </div>
-          <button onClick={onClose} style={{ color: 'var(--text-muted)', fontSize: '1.4rem' }}>
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            <button
+              id="clear-lead-form-btn"
+              type="button"
+              onClick={handleClearForm}
+              title={confirmClear ? 'Click again to confirm reset' : 'Clear all fields'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '6px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                color: confirmClear ? '#ffffff' : '#f87171',
+                background: confirmClear ? '#dc2626' : 'rgba(239, 68, 68, 0.08)',
+                border: confirmClear ? '1px solid #ef4444' : '1px solid rgba(239, 68, 68, 0.25)',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                if (!confirmClear) {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.45)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!confirmClear) {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                }
+              }}
+            >
+              <span>{confirmClear ? '⚠️' : '🗑️'}</span>
+              <span>{confirmClear ? 'Confirm Clear?' : 'Clear Form'}</span>
+            </button>
+            <button
+              id="close-lead-modal-btn"
+              type="button"
+              onClick={onClose}
+              style={{
+                color: 'var(--text-muted)',
+                fontSize: '1.4rem',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px',
+                lineHeight: 1,
+              }}
+              title="Close modal"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {error && (
