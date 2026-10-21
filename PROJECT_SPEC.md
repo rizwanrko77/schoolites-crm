@@ -203,13 +203,20 @@ graph TD
 
 ## 9. Tomorrow's Agenda & Next Steps
 
-When resuming:
-1. **Sanity Check:** Verify the active session on `http://localhost:3000` (Admin: `admin@schoolites.com`, Pre-Sales: `rahul.ps@schoolites.com`, Partner: `anita.partner@schoolites.com`, BR: `vikram.br@schoolites.com`).
-2. **Phase 5: Outbound Prospecting Pipeline (Google Places API New):**
+### Completed Today:
+* **Zero Pre-filled Fields Policy:** All select inputs default to unselected prompts (`-- Select ... --`), `Country` retained as `India` preset with searchable filter.
+* **Lead Form Draft Auto-save:** In-progress details persist to `localStorage` (`schoolites_lead_form_draft`) across modal close/refresh, auto-purges on successful creation.
+* **Two-Stage Clear Form Action:** Modal header features safe inline `Clear Form` -> `⚠️ Confirm Clear?` confirmation button.
+* **Business Relations Portal Overhaul:** Sectioned sidebar separating `GLOBAL PIPELINE` (Unassigned Pool, Assigned to Me, All Leads) from `MY DIRECT SOURCING` (My Generated Leads, Inbound Enquiries with `/e/[code]` link + Convert workflow, and Marketing Assets hub).
+
+### When Resuming Tomorrow Morning:
+1. **Sanity Check:** Active session on `http://localhost:3000` (Admin: `admin@schoolites.com`, Pre-Sales: `rahul.ps@schoolites.com`, Partner: `anita.partner@schoolites.com`, BR: `vikram.br@schoolites.com`).
+2. **Review Business Relations Portal:** Test and walk through any additional workflow nuances or fine-tuning for BR reps.
+3. **Phase 5: Outbound Prospecting Pipeline (Google Places API New):**
    * Staging table (`db_businesses`) with phone & name deduplication against existing leads and enquiries.
    * Admin search interface (City / Keyword / Institution Type) with field masking (only Name, City, Type exposed to junior reps until claimed).
    * Batch release mechanism (10 or 25 leads per batch) allocated to Pre-Sales and Partners.
-3. **Phase 6: Commission & Incentive Settlements:**
+4. **Phase 6: Commission & Incentive Settlements:**
    * `/admin/incentives` clearance modal recording bank UTR / NEFT reference numbers, payout timestamps, and auto-updating partner commission statuses to `cleared`.
 
 
