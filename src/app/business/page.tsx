@@ -213,92 +213,33 @@ export default function BusinessRelationsPage() {
           </div>
         )}
 
-        {/* Hero Banner */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        {/* Top Control Bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
           <div>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Welcome, {user?.name}</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem' }}>
-              Work the unassigned pool, manage active opportunities, and drive institutional closures
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 800 }}>
+              {activeTab === 'unassigned' && '⚡ Unassigned Opportunity Pool'}
+              {activeTab === 'my' && '🎯 My Claimed Opportunities'}
+              {activeTab === 'all' && '🌐 All Institutional Leads'}
+            </h2>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              {activeTab === 'unassigned' && 'Claim qualified leads on first-come-first-served basis to begin sales discussions'}
+              {activeTab === 'my' && 'Track progress through discovery, presentation, and contract closure'}
+              {activeTab === 'all' && 'Complete visibility across all organizational leads'}
             </p>
           </div>
+
+          {/* Search */}
+          <div style={{ width: '100%', maxWidth: '320px' }}>
+            <input
+              type="text"
+              placeholder="Search leads, SPOC, phone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input-field"
+              style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+            />
+          </div>
         </div>
-
-        {/* Primary Tab Navigation */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={() => setActiveTab('unassigned')}
-            style={{
-              padding: '10px 20px',
-              borderRadius: 'var(--radius-md)',
-              fontWeight: 700,
-              fontSize: '0.92rem',
-              cursor: 'pointer',
-              background: activeTab === 'unassigned' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'rgba(255, 255, 255, 0.04)',
-              color: activeTab === 'unassigned' ? '#ffffff' : 'var(--text-secondary)',
-              boxShadow: activeTab === 'unassigned' ? '0 4px 14px rgba(245, 158, 11, 0.35)' : 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <span>⚡</span>
-            <span>Unassigned Pool</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('my')}
-            style={{
-              padding: '10px 20px',
-              borderRadius: 'var(--radius-md)',
-              fontWeight: 700,
-              fontSize: '0.92rem',
-              cursor: 'pointer',
-              background: activeTab === 'my' ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : 'rgba(255, 255, 255, 0.04)',
-              color: activeTab === 'my' ? '#ffffff' : 'var(--text-secondary)',
-              boxShadow: activeTab === 'my' ? '0 4px 14px rgba(99, 102, 241, 0.35)' : 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <span>🎯</span>
-            <span>My Active Leads</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('all')}
-            style={{
-              padding: '10px 20px',
-              borderRadius: 'var(--radius-md)',
-              fontWeight: 700,
-              fontSize: '0.92rem',
-              cursor: 'pointer',
-              background: activeTab === 'all' ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' : 'rgba(255, 255, 255, 0.04)',
-              color: activeTab === 'all' ? '#ffffff' : 'var(--text-secondary)',
-              boxShadow: activeTab === 'all' ? '0 4px 14px rgba(59, 130, 246, 0.35)' : 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <span>🌐</span>
-            <span>All Team Leads</span>
-          </button>
-        </div>
-
-        {/* Search */}
-        <div style={{ width: '100%', maxWidth: '300px' }}>
-          <input
-            type="text"
-            placeholder="Search leads, SPOC, phone..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="input-field"
-            style={{ padding: '8px 14px', fontSize: '0.85rem' }}
-          />
-        </div>
-      </div>
 
       {/* Stage Sub-filters if in My Leads or All Leads */}
       {activeTab !== 'unassigned' && (

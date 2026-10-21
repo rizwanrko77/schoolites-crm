@@ -310,135 +310,69 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
           </div>
         )}
 
-        {/* Hero Banner */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Welcome, {user?.name}</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem' }}>{user?.email}</p>
-          </div>
-        </div>
-
-      {/* UNIQUE SHAREABLE REFERRAL LINK BANNER */}
-      <div
-        className="glass-panel"
-        style={{
-          padding: '24px 28px',
-          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)',
-          borderLeft: `4px solid ${roleColor}`,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '20px',
-        }}
-      >
-        <div style={{ flex: 1, minWidth: '280px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <span style={{ fontSize: '1.2rem' }}>🔗</span>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Your Unique Public Referral Link</h3>
-          </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.45', marginBottom: '12px' }}>
-            Share this link publicly with institutions. All inbound enquiries submitted through this page are directly attributed to your account.
-          </p>
-
+        {/* UNIQUE SHAREABLE REFERRAL LINK BANNER (Shown on Enquiries and Assets tabs) */}
+        {(activeTab === 'enquiries' || activeTab === 'assets') && (
           <div
+            className="glass-panel"
             style={{
+              padding: '24px 28px',
+              background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)',
+              borderLeft: `4px solid ${roleColor}`,
               display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '10px',
-              padding: '10px 14px',
-              background: 'rgba(15, 23, 42, 0.85)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              fontFamily: 'monospace',
-              fontSize: '0.9rem',
-              color: '#c7d2fe',
-              wordBreak: 'break-all',
+              flexWrap: 'wrap',
+              gap: '20px',
             }}
           >
-            <span>{publicLink}</span>
+            <div style={{ flex: 1, minWidth: '280px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <span style={{ fontSize: '1.2rem' }}>🔗</span>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Your Unique Public Referral Link</h3>
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.45', marginBottom: '12px' }}>
+                Share this link publicly with institutions. All inbound enquiries submitted through this page are directly attributed to your account.
+              </p>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '10px 14px',
+                  background: 'rgba(15, 23, 42, 0.85)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  fontFamily: 'monospace',
+                  fontSize: '0.9rem',
+                  color: '#c7d2fe',
+                  wordBreak: 'break-all',
+                }}
+              >
+                <span>{publicLink}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => copyToClipboard(publicLink, 'your unique referral link')}
+                className="btn-primary"
+                style={{ padding: '10px 18px', fontSize: '0.88rem' }}
+              >
+                📋 Copy Link
+              </button>
+              <a
+                href={`/e/${user?.user_code}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary"
+                style={{ padding: '10px 18px', fontSize: '0.88rem' }}
+              >
+                Preview Page ↗
+              </a>
+            </div>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => copyToClipboard(publicLink, 'your unique referral link')}
-            className="btn-primary"
-            style={{ padding: '10px 18px', fontSize: '0.88rem' }}
-          >
-            📋 Copy Link
-          </button>
-          <a
-            href={`/e/${user?.user_code}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-secondary"
-            style={{ padding: '10px 18px', fontSize: '0.88rem' }}
-          >
-            Preview Page ↗
-          </a>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '12px' }}>
-        <button
-          onClick={() => setActiveTab('enquiries')}
-          style={{
-            padding: '10px 20px',
-            borderRadius: 'var(--radius-md)',
-            fontWeight: 700,
-            fontSize: '0.92rem',
-            background: activeTab === 'enquiries' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-            color: activeTab === 'enquiries' ? '#ffffff' : 'var(--text-secondary)',
-            border: activeTab === 'enquiries' ? '1px solid #818cf8' : '1px solid transparent',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <span>📥</span>
-          <span>My Enquiries ({enquiries.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('leads')}
-          style={{
-            padding: '10px 20px',
-            borderRadius: 'var(--radius-md)',
-            fontWeight: 700,
-            fontSize: '0.92rem',
-            background: activeTab === 'leads' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-            color: activeTab === 'leads' ? '#ffffff' : 'var(--text-secondary)',
-            border: activeTab === 'leads' ? '1px solid #818cf8' : '1px solid transparent',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <span>🎯</span>
-          <span>My Generated Leads ({myLeads.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('assets')}
-          style={{
-            padding: '10px 20px',
-            borderRadius: 'var(--radius-md)',
-            fontWeight: 700,
-            fontSize: '0.92rem',
-            background: activeTab === 'assets' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-            color: activeTab === 'assets' ? '#ffffff' : 'var(--text-secondary)',
-            border: activeTab === 'assets' ? '1px solid #818cf8' : '1px solid transparent',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <span>📁</span>
-          <span>Marketing Assets & Templates ({assets.length})</span>
-        </button>
-      </div>
+        )}
 
       {/* TAB 1: ENQUIRIES INBOX */}
       {activeTab === 'enquiries' && (
