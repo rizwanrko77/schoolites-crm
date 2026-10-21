@@ -147,6 +147,13 @@ graph TD
 * **Auth & Public Enquiry Cards:**
   * `.auth-card` and `.enquiry-card` padding adapts to `28px 18px` on mobile screens.
   * 6-digit OTP verification inputs dynamically flex (`minWidth: 36px`, `maxWidth: 52px`, `gap: 6px`) to fit even 320px devices without clipping.
+* **Lead Modal Contact Layout (`.contact-grid-2col`):**
+  * SPOC, Decision Maker, and Additional Contact sections use a symmetrical 2x2 grid on desktop/laptop:
+    * Row 1: Contact Name | Designation / Role
+    * Row 2: Mobile / WhatsApp | Email Address
+  * Mobile view (< 640px) seamlessly collapses into a clean 1-column stack (1 field per row).
+  * Designations are completely un-prefilled (`''`) with descriptive placeholders and `autoComplete="off"`.
+  * Admin Form Configurator (`/admin/forms` & `form_field_configs` table) synchronized with all 25 lead fields including `additional_contact_*` and `expected_start_date`.
 
 ---
 

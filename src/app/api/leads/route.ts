@@ -186,8 +186,8 @@ export async function POST(req: NextRequest) {
         ${leadCode}, ${user.id}, ${initialManagerId}, ${source_enquiry_id || null},
         ${institute_type || 'School'}, ${institute_name.trim()}, ${country || 'India'}, ${city || 'Unknown'}, ${student_strength || 'Unspecified'},
         ${finalCurrentErp}, ${current_erp_name || null},
-        ${spoc_name.trim()}, ${spoc_role || 'SPOC'}, ${cleanSpocPhone}, ${normalizedSpocEmail},
-        ${Boolean(dm_same_as_spoc)}, ${finalDmName.trim()}, ${finalDmRole || 'Principal'}, ${finalDmPhone}, ${finalDmEmail},
+        ${spoc_name.trim()}, ${spoc_role ? spoc_role.trim() : 'SPOC'}, ${cleanSpocPhone}, ${normalizedSpocEmail},
+        ${Boolean(dm_same_as_spoc)}, ${finalDmName.trim()}, ${finalDmRole ? finalDmRole.trim() : 'Decision Maker'}, ${finalDmPhone}, ${finalDmEmail},
         ${additional_contact_name || null}, ${additional_contact_role || null}, ${additional_contact_phone || null}, ${additional_contact_email || null},
         ${decision_flow || null}, ${preferred_slot_date || null}, ${preferred_slot_time || null}, ${finalSlotMode}, ${expected_start_date || null}, ${additional_details || null},
         ${initialStatus}, ${deal_value ? parseFloat(deal_value) : 0.00}, ${isDuplicate}, ${duplicateOfLeadId}

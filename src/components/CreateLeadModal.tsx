@@ -57,16 +57,16 @@ export default function CreateLeadModal({
     current_erp: 'unsure',
     current_erp_name: '',
     spoc_name: '',
-    spoc_role: 'Principal / Admin Head',
+    spoc_role: '',
     spoc_phone: '',
     spoc_email: '',
     dm_same_as_spoc: false,
     dm_name: '',
-    dm_role: 'Principal / Management',
+    dm_role: '',
     dm_phone: '',
     dm_email: '',
     additional_contact_name: '',
-    additional_contact_role: 'IT Coordinator / Admin',
+    additional_contact_role: '',
     additional_contact_phone: '',
     additional_contact_email: '',
     decision_flow: '',
@@ -115,26 +115,75 @@ export default function CreateLeadModal({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Pre-fill if enquiry is passed
+  // Reset or pre-fill form when modal opens or initialEnquiry changes
   useEffect(() => {
+    if (!isOpen) return;
+
     if (initialEnquiry) {
-      setFormData((prev: any) => ({
-        ...prev,
-        source_enquiry_id: initialEnquiry.id,
+      setFormData({
         institute_type: initialEnquiry.institute_type || 'School',
         institute_name: initialEnquiry.institute_name || '',
         country: initialEnquiry.country || 'India',
         city: initialEnquiry.city || '',
         student_strength: mapStudentStrength(initialEnquiry.student_count),
+        current_erp: 'unsure',
+        current_erp_name: '',
         spoc_name: initialEnquiry.spoc_name || '',
+        spoc_role: '',
         spoc_phone: initialEnquiry.phone || '',
         spoc_email: initialEnquiry.email || '',
+        dm_same_as_spoc: false,
+        dm_name: '',
+        dm_role: '',
+        dm_phone: '',
+        dm_email: '',
+        additional_contact_name: '',
+        additional_contact_role: '',
+        additional_contact_phone: '',
+        additional_contact_email: '',
+        decision_flow: '',
+        preferred_slot_date: '',
+        preferred_slot_time: '11:00 AM',
+        preferred_slot_mode: 'Phone/WhatsApp Call',
+        expected_start_date: 'Within 1 Month',
         additional_details: initialEnquiry.message ? `Requirements from Enquiry: ${initialEnquiry.message}` : '',
-      }));
-    } else {
+        source_enquiry_id: initialEnquiry.id,
+      });
       setShowAdditionalContact(false);
+      setError('');
+    } else {
+      setFormData({
+        institute_type: 'School',
+        institute_name: '',
+        country: 'India',
+        city: '',
+        student_strength: '500 - 1000',
+        current_erp: 'unsure',
+        current_erp_name: '',
+        spoc_name: '',
+        spoc_role: '',
+        spoc_phone: '',
+        spoc_email: '',
+        dm_same_as_spoc: false,
+        dm_name: '',
+        dm_role: '',
+        dm_phone: '',
+        dm_email: '',
+        additional_contact_name: '',
+        additional_contact_role: '',
+        additional_contact_phone: '',
+        additional_contact_email: '',
+        decision_flow: '',
+        preferred_slot_date: '',
+        preferred_slot_time: '11:00 AM',
+        preferred_slot_mode: 'Phone/WhatsApp Call',
+        expected_start_date: 'Within 1 Month',
+        additional_details: '',
+      });
+      setShowAdditionalContact(false);
+      setError('');
     }
-  }, [initialEnquiry]);
+  }, [isOpen, initialEnquiry]);
 
 
   if (!isOpen) return null;
@@ -424,7 +473,7 @@ export default function CreateLeadModal({
             </h3>
 
             {/* SPOC */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+            <div className="contact-grid-2col" style={{ marginBottom: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                   SPOC Name *
@@ -449,6 +498,7 @@ export default function CreateLeadModal({
                   value={formData.spoc_role}
                   onChange={(e) => setFormData({ ...formData, spoc_role: e.target.value })}
                   className="input-field"
+                  autoComplete="off"
                   required
                 />
               </div>
@@ -508,7 +558,7 @@ export default function CreateLeadModal({
 
             {/* Decision Maker if different */}
             {!formData.dm_same_as_spoc && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '16px', padding: '14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)' }}>
+              <div className="contact-grid-2col" style={{ marginBottom: '16px', padding: '14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                     Decision Maker Name *
@@ -533,6 +583,7 @@ export default function CreateLeadModal({
                     value={formData.dm_role}
                     onChange={(e) => setFormData({ ...formData, dm_role: e.target.value })}
                     className="input-field"
+                    autoComplete="off"
                     required={!formData.dm_same_as_spoc}
                   />
                 </div>
@@ -645,7 +696,7 @@ export default function CreateLeadModal({
                     </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <div className="contact-grid-2col">
                     <div>
                       <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                         Contact Person Name
@@ -669,6 +720,7 @@ export default function CreateLeadModal({
                         value={formData.additional_contact_role}
                         onChange={(e) => setFormData({ ...formData, additional_contact_role: e.target.value })}
                         className="input-field"
+                        autoComplete="off"
                       />
                     </div>
 

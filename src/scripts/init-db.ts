@@ -93,16 +93,17 @@ async function main() {
       { key: 'dm_phone', label: 'Decision Maker Mobile / WhatsApp', category: 'decision_maker', type: 'number', options: [], visible: true, required: true, order: 14 },
       { key: 'dm_email', label: 'Decision Maker Email', category: 'decision_maker', type: 'text', options: [], visible: true, required: false, order: 15 },
       
-      { key: 'additional_contact_name', label: 'Additional Contact Name (IT/Admin)', category: 'additional_contact', type: 'text', options: [], visible: true, required: false, order: 16 },
-      { key: 'additional_contact_role', label: 'Additional Contact Role', category: 'additional_contact', type: 'text', options: [], visible: true, required: false, order: 17 },
-      { key: 'additional_contact_phone', label: 'Additional Contact Phone', category: 'additional_contact', type: 'number', options: [], visible: true, required: false, order: 18 },
+      { key: 'additional_contact_name', label: 'Additional Contact Person Name', category: 'additional_contact', type: 'text', options: [], visible: true, required: false, order: 16 },
+      { key: 'additional_contact_role', label: 'Additional Contact Designation / Role', category: 'additional_contact', type: 'text', options: [], visible: true, required: false, order: 17 },
+      { key: 'additional_contact_phone', label: 'Additional Contact Mobile / WhatsApp', category: 'additional_contact', type: 'number', options: [], visible: true, required: false, order: 18 },
       { key: 'additional_contact_email', label: 'Additional Contact Email', category: 'additional_contact', type: 'text', options: [], visible: true, required: false, order: 19 },
       
       { key: 'decision_flow', label: 'Decision Flow', category: 'pipeline', type: 'textarea', options: [], visible: true, required: false, order: 20 },
       { key: 'preferred_slot_date', label: 'Preferred Connect Date', category: 'pipeline', type: 'date', options: [], visible: true, required: false, order: 21 },
       { key: 'preferred_slot_time', label: 'Preferred Connect Time', category: 'pipeline', type: 'text', options: [], visible: true, required: false, order: 22 },
-      { key: 'preferred_slot_mode', label: 'Preferred Connect Mode', category: 'pipeline', type: 'select', options: ['Call', 'Meeting', 'Other'], visible: true, required: false, order: 23 },
-      { key: 'additional_details', label: 'Additional Details', category: 'pipeline', type: 'textarea', options: [], visible: true, required: false, order: 24 },
+      { key: 'preferred_slot_mode', label: 'Preferred Connect Mode', category: 'pipeline', type: 'select', options: ['Phone/WhatsApp Call', 'Virtual Meet', 'Unsure'], visible: true, required: false, order: 23 },
+      { key: 'expected_start_date', label: 'Expected Implementation Start', category: 'pipeline', type: 'select', options: ['Immediately (Within 1-2 weeks)', 'Within 1 Month', 'Within 2-3 Months', 'Next Academic Session', 'Flexible / Exploring', 'Specific Date...'], visible: true, required: false, order: 24 },
+      { key: 'additional_details', label: 'Additional Details', category: 'pipeline', type: 'textarea', options: [], visible: true, required: false, order: 25 },
     ];
 
     for (const f of leadFields) {

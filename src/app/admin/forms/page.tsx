@@ -140,7 +140,7 @@ export default function AdminFormsPage() {
           }}
         >
           <span>📝</span>
-          <span>Public Enquiry Form (10 Fields)</span>
+          <span>Public Enquiry Form {activeTab === 'enquiry' && configs.length ? `(${configs.length} Fields)` : '(10 Fields)'}</span>
         </button>
 
         <button
@@ -161,7 +161,7 @@ export default function AdminFormsPage() {
           }}
         >
           <span>🎯</span>
-          <span>Lead Creation Form (24 Fields)</span>
+          <span>Lead Creation Form {activeTab === 'lead' && configs.length ? `(${configs.length} Fields)` : '(25 Fields)'}</span>
         </button>
       </div>
 
