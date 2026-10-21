@@ -150,7 +150,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div style={{ padding: '32px 40px', minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+    <div className="workspace-container">
       {/* Top Banner / Toast Notification */}
       {toastMsg && (
         <div
@@ -308,7 +308,7 @@ export default function AdminUsersPage() {
 
       {/* Users Table */}
       <div className="glass-panel" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-responsive">
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>

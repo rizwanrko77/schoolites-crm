@@ -428,7 +428,7 @@ export default function AdminAssetsPage() {
   };
 
   return (
-    <div style={{ padding: '32px 40px', minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+    <div className="workspace-container">
       {/* Toast Alert */}
       {toastMsg && (
         <div
@@ -728,7 +728,7 @@ export default function AdminAssetsPage() {
           <p style={{ fontSize: '0.85rem' }}>Click "+ Add Outreach Asset" to publish materials for team members.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '22px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '20px' }}>
           {assets.map((asset) => {
             const hasMultiFiles = Array.isArray(asset.files) && asset.files.length > 0;
             const activeIndex = cardImageIndices[asset.id] || 0;

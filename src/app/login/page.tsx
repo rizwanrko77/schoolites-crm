@@ -178,11 +178,10 @@ export default function LoginPage() {
       />
 
       <div
-        className="glass-panel"
+        className="glass-panel auth-card"
         style={{
           width: '100%',
           maxWidth: '460px',
-          padding: '40px 36px',
           position: 'relative',
           zIndex: 1,
           animation: 'slideUp 0.35s ease',
@@ -348,7 +347,7 @@ export default function LoginPage() {
               <div
                 style={{
                   display: 'flex',
-                  gap: '8px',
+                  gap: '6px',
                   justifyContent: 'space-between',
                 }}
                 onPaste={handleOtpPaste}
@@ -367,10 +366,12 @@ export default function LoginPage() {
                     onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                     disabled={isLoading}
                     style={{
-                      width: '52px',
-                      height: '56px',
+                      width: '100%',
+                      maxWidth: '52px',
+                      minWidth: '36px',
+                      height: '52px',
                       textAlign: 'center',
-                      fontSize: '1.4rem',
+                      fontSize: '1.35rem',
                       fontWeight: 700,
                       borderRadius: 'var(--radius-md)',
                       background: 'rgba(15, 23, 42, 0.9)',

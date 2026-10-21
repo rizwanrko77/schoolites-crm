@@ -43,8 +43,12 @@ export default function ActorShell({
 }: ActorShellProps) {
   const router = useRouter();
 
-  // Sidebar expanded state with localStorage persistence (default true)
+  // Desktop sidebar expanded state with localStorage persistence (default true)
   const [isExpanded, setIsExpanded] = useState(true);
+
+  // Mobile drawer state
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   // My Account Profile Menu State
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -55,6 +59,17 @@ export default function ActorShell({
     if (saved !== null) {
       setIsExpanded(saved === 'true');
     }
+
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setMobileDrawerOpen(false);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Close profile menu on click outside
@@ -69,11 +84,15 @@ export default function ActorShell({
   }, []);
 
   const toggleSidebar = () => {
-    setIsExpanded((prev) => {
-      const next = !prev;
-      localStorage.setItem('schoolites_sidebar_expanded', String(next));
-      return next;
-    });
+    if (isMobile) {
+      setMobileDrawerOpen((prev) => !prev);
+    } else {
+      setIsExpanded((prev) => {
+        const next = !prev;
+        localStorage.setItem('schoolites_sidebar_expanded', String(next));
+        return next;
+      });
+    }
   };
 
   const handleLogout = async () => {
@@ -85,12 +104,28 @@ export default function ActorShell({
     }
   };
 
-  const sidebarWidth = isExpanded ? 260 : 72;
+  const showLabels = isMobile || isExpanded;
+  const sidebarWidth = isMobile ? 270 : isExpanded ? 260 : 72;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: 'var(--bg-primary)' }}>
+      {/* Mobile Drawer Backdrop Overlay */}
+      {isMobile && mobileDrawerOpen && (
+        <div
+          onClick={() => setMobileDrawerOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 998,
+            background: 'rgba(5, 8, 16, 0.75)',
+            backdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        />
+      )}
+
       {/* ========================================================
-          EXPANDABLE SIDEBAR
+          EXPANDABLE SIDEBAR / MOBILE OFF-CANVAS DRAWER
          ======================================================== */}
       <aside
         id="app-sidebar"
@@ -100,64 +135,92 @@ export default function ActorShell({
           top: 0,
           bottom: 0,
           left: 0,
-          zIndex: 100,
-          background: 'rgba(11, 17, 32, 0.96)',
+          zIndex: isMobile ? 999 : 100,
+          background: 'rgba(11, 17, 32, 0.98)',
           backdropFilter: 'blur(20px)',
           borderRight: '1px solid var(--border-subtle)',
           display: 'flex',
           flexDirection: 'column',
-          transition: 'width 0.24s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: isMobile
+            ? 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+            : 'width 0.24s cubic-bezier(0.4, 0, 0.2, 1)',
+          transform: isMobile ? (mobileDrawerOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
           overflow: 'hidden',
-          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.35)',
+          boxShadow: isMobile && mobileDrawerOpen ? '8px 0 32px rgba(0, 0, 0, 0.75)' : '4px 0 24px rgba(0, 0, 0, 0.35)',
         }}
       >
-        {/* Brand Header (without role subtitle and without redundant collapse button) */}
+        {/* Brand Header */}
         <div
           style={{
-            height: '64px',
-            padding: isExpanded ? '0 20px' : '0 12px',
+            height: isMobile ? '58px' : '64px',
+            padding: showLabels ? '0 20px' : '0 12px',
             borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: isExpanded ? 'flex-start' : 'center',
+            justifyContent: showLabels ? 'space-between' : 'center',
             gap: '12px',
             flexShrink: 0,
           }}
         >
-          <img
-            src="/schoolites-logo.png"
-            alt="Schoolites Logo"
-            style={{
-              width: '36px',
-              height: '36px',
-              minWidth: '36px',
-              borderRadius: '50%',
-              objectFit: 'cover',
-              background: '#ffffff',
-              boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4)',
-              flexShrink: 0,
-            }}
-          />
-          {isExpanded && (
-            <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-              <h2 style={{ fontSize: '1.02rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#ffffff', lineHeight: 1.2 }}>
-                Schoolites ERP
-              </h2>
-              <span
-                style={{
-                  fontSize: '0.68rem',
-                  color: roleColor,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'block',
-                  lineHeight: 1.3,
-                  marginTop: '2px',
-                }}
-              >
-                {roleTitle}
-              </span>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
+            <img
+              src="/schoolites-logo.png"
+              alt="Schoolites Logo"
+              style={{
+                width: '36px',
+                height: '36px',
+                minWidth: '36px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                background: '#ffffff',
+                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4)',
+                flexShrink: 0,
+              }}
+            />
+            {showLabels && (
+              <div style={{ overflow: 'hidden' }}>
+                <h2 style={{ fontSize: isMobile ? '0.98rem' : '1.02rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#ffffff', lineHeight: 1.2 }}>
+                  Schoolites ERP
+                </h2>
+                <span
+                  style={{
+                    fontSize: isMobile ? '0.62rem' : '0.68rem',
+                    color: roleColor,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    display: 'block',
+                    lineHeight: 1.2,
+                    marginTop: '2px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {roleTitle}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Close button inside mobile drawer */}
+          {isMobile && (
+            <button
+              onClick={() => setMobileDrawerOpen(false)}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '6px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                color: 'var(--text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1rem',
+              }}
+            >
+              ✕
+            </button>
           )}
         </div>
 
@@ -165,7 +228,7 @@ export default function ActorShell({
         <nav
           style={{
             flex: 1,
-            padding: isExpanded ? '20px 12px' : '20px 8px',
+            padding: showLabels ? '20px 12px' : '20px 8px',
             overflowY: 'auto',
             overflowX: 'hidden',
             display: 'flex',
@@ -173,7 +236,7 @@ export default function ActorShell({
             gap: '6px',
           }}
         >
-          {isExpanded && (
+          {showLabels && (
             <div
               style={{
                 fontSize: '0.68rem',
@@ -196,7 +259,7 @@ export default function ActorShell({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: isExpanded ? 'space-between' : 'center',
+                  justifyContent: showLabels ? 'space-between' : 'center',
                   width: '100%',
                   gap: '12px',
                 }}
@@ -214,7 +277,7 @@ export default function ActorShell({
                   >
                     {item.icon}
                   </span>
-                  {isExpanded && (
+                  {showLabels && (
                     <span
                       style={{
                         whiteSpace: 'nowrap',
@@ -229,7 +292,7 @@ export default function ActorShell({
                   )}
                 </div>
 
-                {isExpanded && item.badge !== undefined && item.badge !== null && (
+                {showLabels && item.badge !== undefined && item.badge !== null && (
                   <span
                     style={{
                       fontSize: '0.7rem',
@@ -251,8 +314,8 @@ export default function ActorShell({
               display: 'flex',
               alignItems: 'center',
               width: '100%',
-              padding: isExpanded ? '10px 14px' : '12px 0',
-              justifyContent: isExpanded ? 'flex-start' : 'center',
+              padding: showLabels ? '10px 14px' : '12px 0',
+              justifyContent: showLabels ? 'flex-start' : 'center',
               borderRadius: 'var(--radius-md)',
               background: isActive
                 ? 'linear-gradient(90deg, rgba(99, 102, 241, 0.22) 0%, rgba(99, 102, 241, 0.08) 100%)'
@@ -270,7 +333,10 @@ export default function ActorShell({
                 <Link
                   key={item.id}
                   href={item.href}
-                  title={!isExpanded ? item.label : undefined}
+                  onClick={() => {
+                    if (isMobile) setMobileDrawerOpen(false);
+                  }}
+                  title={!showLabels ? item.label : undefined}
                   style={commonStyles}
                 >
                   {content}
@@ -281,8 +347,11 @@ export default function ActorShell({
             return (
               <button
                 key={item.id}
-                onClick={item.onClick}
-                title={!isExpanded ? item.label : undefined}
+                onClick={() => {
+                  item.onClick?.();
+                  if (isMobile) setMobileDrawerOpen(false);
+                }}
+                title={!showLabels ? item.label : undefined}
                 style={commonStyles}
                 onMouseEnter={(e) => {
                   if (!isActive) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
@@ -299,16 +368,16 @@ export default function ActorShell({
       </aside>
 
       {/* ========================================================
-          MAIN WORKSPACE WRAPPER (Auto-offsets with sidebar)
+          MAIN WORKSPACE WRAPPER (Auto-offsets with sidebar / 0 margin on mobile)
          ======================================================== */}
       <div
         style={{
           flex: 1,
-          marginLeft: `${sidebarWidth}px`,
+          marginLeft: isMobile ? '0px' : `${sidebarWidth}px`,
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
-          transition: 'margin-left 0.24s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: isMobile ? 'none' : 'margin-left 0.24s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         {/* ========================================================
@@ -319,26 +388,26 @@ export default function ActorShell({
             position: 'sticky',
             top: 0,
             zIndex: 90,
-            height: '64px',
+            height: isMobile ? '58px' : '64px',
             background: 'rgba(9, 13, 22, 0.88)',
             backdropFilter: 'blur(16px)',
             borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0 32px',
-            gap: '16px',
+            padding: isMobile ? '0 14px' : '0 32px',
+            gap: isMobile ? '10px' : '16px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
           }}
         >
-          {/* Left: Sidebar Toggle + Portal & Section Breadcrumb */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {/* Left: Sidebar Toggle + Current Section Title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px', overflow: 'hidden' }}>
             <button
               onClick={toggleSidebar}
-              title={isExpanded ? 'Collapse Sidebar' : 'Expand Sidebar'}
+              title={isMobile ? 'Open Menu' : isExpanded ? 'Collapse Sidebar' : 'Expand Sidebar'}
               style={{
-                width: '36px',
-                height: '36px',
+                width: isMobile ? '34px' : '36px',
+                height: isMobile ? '34px' : '36px',
                 borderRadius: '8px',
                 background: 'rgba(255, 255, 255, 0.04)',
                 border: '1px solid var(--border-subtle)',
@@ -346,8 +415,9 @@ export default function ActorShell({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '1rem',
+                fontSize: isMobile ? '0.95rem' : '1rem',
                 transition: 'all 0.15s ease',
+                flexShrink: 0,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
@@ -361,15 +431,27 @@ export default function ActorShell({
               ☰
             </button>
 
-            <div>
-              <span style={{ fontSize: '1.02rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.01em' }}>
+            <div style={{ overflow: 'hidden' }}>
+              <span
+                style={{
+                  fontSize: isMobile ? '0.9rem' : '1.02rem',
+                  fontWeight: 700,
+                  color: '#ffffff',
+                  letterSpacing: '-0.01em',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  display: 'block',
+                  maxWidth: isMobile ? '150px' : '400px',
+                }}
+              >
                 {activeTabTitle || roleTitle}
               </span>
             </div>
           </div>
 
           {/* Right: Action Buttons + "My Account" Profile Menu */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '14px', flexShrink: 0 }}>
             {/* Action Buttons (e.g. + Create Lead) */}
             {headerActions && (
               <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -384,8 +466,8 @@ export default function ActorShell({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '9px',
-                  padding: '5px 14px 5px 6px',
+                  gap: isMobile ? '6px' : '9px',
+                  padding: isMobile ? '4px 10px 4px 4px' : '5px 14px 5px 6px',
                   borderRadius: '24px',
                   background: isProfileMenuOpen ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.05)',
                   border: isProfileMenuOpen ? '1px solid rgba(99, 102, 241, 0.5)' : '1px solid var(--border-subtle)',
@@ -402,14 +484,14 @@ export default function ActorShell({
               >
                 <div
                   style={{
-                    width: '30px',
-                    height: '30px',
+                    width: isMobile ? '26px' : '30px',
+                    height: isMobile ? '26px' : '30px',
                     borderRadius: '50%',
                     background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '0.82rem',
+                    fontSize: isMobile ? '0.76rem' : '0.82rem',
                     fontWeight: 700,
                     color: '#ffffff',
                     boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
@@ -417,7 +499,7 @@ export default function ActorShell({
                 >
                   {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
                 </div>
-                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>My Account</span>
+                {!isMobile && <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>My Account</span>}
                 <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{isProfileMenuOpen ? '▲' : '▼'}</span>
               </button>
 
@@ -429,6 +511,7 @@ export default function ActorShell({
                     top: 'calc(100% + 8px)',
                     right: 0,
                     width: '270px',
+                    maxWidth: 'calc(100vw - 28px)',
                     background: 'rgba(15, 23, 42, 0.98)',
                     backdropFilter: 'blur(24px)',
                     border: '1px solid var(--border-subtle)',

@@ -303,11 +303,10 @@ function EnquiryContent() {
       }}
     >
       <div
-        className="glass-panel"
+        className="glass-panel enquiry-card"
         style={{
           width: '100%',
           maxWidth: '680px',
-          padding: '44px 36px',
           boxShadow: 'var(--shadow-lg)',
           animation: 'fadeIn 0.25s ease',
         }}

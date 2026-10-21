@@ -182,32 +182,8 @@ export default function CreateLeadModal({
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(5, 8, 16, 0.8)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1200,
-        padding: '24px',
-        animation: 'fadeIn 0.2s ease',
-      }}
-    >
-      <div
-        className="glass-panel"
-        style={{
-          width: '100%',
-          maxWidth: '780px',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          padding: '36px',
-          boxShadow: 'var(--shadow-lg)',
-          animation: 'slideUp 0.25s ease',
-        }}
-      >
+    <div className="modal-backdrop">
+      <div className="glass-panel modal-dialog">
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
           <div>
@@ -263,7 +239,7 @@ export default function CreateLeadModal({
                 </select>
               </div>
 
-              <div style={{ gridColumn: 'span 2' }}>
+              <div className="col-span-2-responsive">
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                   Institution Name *
                 </label>

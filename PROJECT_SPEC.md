@@ -106,13 +106,51 @@ graph TD
 | **Lead Form Enhancements** | Searchable country select (defaults India, strictly excludes Pakistan), student strength bracket dropdown (`Below 500` to `4000+`), hybrid expected start date selector, and preferred mode options | ✅ Complete |
 | **ActorShell Architecture** | Unified sticky header and expandable/collapsible sidebar (260px expanded / 72px icon rail with toggle) tailored per actor (Admin, Pre-Sales, Referral, Business Relations) with instant tab-switching, My Account profile dropdown menu, and persistent state | ✅ Complete |
 | **Brand Identity & Favicon** | Integrated official Schoolites circular logo (geometric origami motif + cursive script) across favicon (`/favicon.ico`, `/icon.png`), sidebar brand header (`Schoolites ERP`), login portal, root redirect, and public enquiry page | ✅ Complete |
+| **Mobile Responsiveness Engine** | Universal off-canvas slide drawer (`<= 768px`) with dark backdrop overlay, auto-closing nav links, sticky header with ellipsis protection, fluid workspace containers (`.workspace-container`), responsive horizontal scrolling on all data tables (`.table-responsive`), responsive modal dialogs (`.modal-backdrop` & `.modal-dialog`), and responsive OTP inputs | ✅ Complete |
 | **Version Control Sync** | Connected to GitHub (`https://github.com/rizwanrko77/schoolites-crm.git`) on `main` branch with strictly ignored `.env.local` | ✅ Complete |
 | **Phase 5** | Google Places API (New) integration with strict field masking, staging deduplication, and batch lead release | ⏳ Ready to build |
 | **Phase 6** | Deal settlement & bank UTR reference tracking in `/admin/incentives` | ⏳ Ready to build |
 
 ---
 
-## 7. Marketing Assets Architecture (Reference for Resuming)
+## 7. Mobile Responsiveness Architecture
+
+### Viewport & Containers:
+* **Viewport Config:** Explicitly exported in [`src/app/layout.tsx`](file:///c:/Users/91725/schoolites/src/app/layout.tsx) with `width: device-width, initialScale: 1, maximumScale: 5`.
+* **Universal Workspace Container (`.workspace-container`):** Replaced hardcoded paddings (`32px 40px` / `28px 36px`) across Admin, Pre-Sales, Referral, and Business Relations with responsive padding:
+  * Desktop (`> 768px`): `padding: 28px 36px; max-width: 1400px;`
+  * Tablet/Mobile (`<= 768px`): `padding: 16px 12px; gap: 16px;`
+  * Small Phone (`<= 480px`): `padding: 12px 8px; gap: 14px;`
+
+### Navigation & Header Mechanics:
+* **Off-Canvas Slide Drawer (`ActorShell.tsx`):**
+  * Breakpoint: `<= 768px`.
+  * Width: `270px` with smooth cubic-bezier slide (`transform: translateX(0)` vs `translateX(-100%)`).
+  * Backdrop: Fixed full-screen backdrop with `rgba(5, 8, 16, 0.82)` and `backdrop-filter: blur(12px)`.
+  * Auto-Close: Automatically closes drawer on backdrop tap, `✕` button tap, or any nav item / link selection.
+  * Content Margin: Main workspace has `marginLeft: 0px` on mobile, reclaiming 100% of the screen width.
+* **Sticky Header:**
+  * Height: `58px` on mobile, `64px` on desktop.
+  * Section title protected with `text-overflow: ellipsis` and `maxWidth` constraint so it never crowds out action buttons.
+  * Profile Menu: "My Account" collapses to circular user initial badge + chevron on mobile, saving horizontal space while preserving full user info popover.
+
+### Table & Modal Adaptations:
+* **Horizontally Scrollable Tables (`.table-responsive`):**
+  * Applied across all actor lead tables, enquiry tables, users tables, and audit log tables.
+  * Ensures table width maintains `min-width: 680px` for clear legibility without squishing data into vertical single-character columns.
+* **Responsive Modals (`.modal-backdrop` & `.modal-dialog`):**
+  * `CreateLeadModal.tsx` & `LeadDetailModal.tsx`:
+    * Backdrop padding reduced to `10px 8px` on mobile.
+    * Modal dialog padding reduced to `20px 14px` on mobile with `maxHeight: 94vh`.
+    * Form grids utilize `.col-span-2-responsive` (collapses to 1 column on mobile phones `<= 640px`).
+    * Navigation tabs in `LeadDetailModal` scroll smoothly on mobile with `overflowX: auto` and `whiteSpace: nowrap`.
+* **Auth & Public Enquiry Cards:**
+  * `.auth-card` and `.enquiry-card` padding adapts to `28px 18px` on mobile screens.
+  * 6-digit OTP verification inputs dynamically flex (`minWidth: 36px`, `maxWidth: 52px`, `gap: 6px`) to fit even 320px devices without clipping.
+
+---
+
+## 8. Marketing Assets Architecture (Reference for Resuming)
 
 ### File Structure & Storage Paths:
 * **Neon S3 Bucket:** `storage-bucket` (Singapore `ap-southeast-1`, custom endpoint).
@@ -133,7 +171,7 @@ graph TD
 
 ---
 
-## 8. Tomorrow's Agenda & Next Steps
+## 9. Tomorrow's Agenda & Next Steps
 
 When resuming:
 1. **Sanity Check:** Verify the active session on `http://localhost:3000` (Admin: `admin@schoolites.com`, Pre-Sales: `rahul.ps@schoolites.com`, Partner: `anita.partner@schoolites.com`, BR: `vikram.br@schoolites.com`).
@@ -143,5 +181,6 @@ When resuming:
    * Batch release mechanism (10 or 25 leads per batch) allocated to Pre-Sales and Partners.
 3. **Phase 6: Commission & Incentive Settlements:**
    * `/admin/incentives` clearance modal recording bank UTR / NEFT reference numbers, payout timestamps, and auto-updating partner commission statuses to `cleared`.
+
 
 

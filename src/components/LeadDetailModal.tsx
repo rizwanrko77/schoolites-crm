@@ -164,35 +164,18 @@ export default function LeadDetailModal({
   const globalRemarks = notes.filter((n) => n.visibility === 'global');
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(5, 8, 16, 0.8)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1200,
-        padding: '24px',
-        animation: 'fadeIn 0.2s ease',
-      }}
-    >
+    <div className="modal-backdrop">
       <div
-        className="glass-panel"
+        className="glass-panel modal-dialog"
         style={{
-          width: '100%',
-          maxWidth: '840px',
-          maxHeight: '92vh',
+          padding: 0,
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: 'var(--shadow-lg)',
-          animation: 'slideUp 0.25s ease',
           overflow: 'hidden',
         }}
       >
         {/* Top Header */}
-        <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
               <span className="user-code-pill" style={{ color: '#818cf8', fontSize: '0.9rem' }}>
@@ -296,7 +279,7 @@ export default function LeadDetailModal({
         )}
 
         {/* Navigation Tabs */}
-        <div style={{ display: 'flex', gap: '8px', padding: '12px 32px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.01)' }}>
+        <div style={{ display: 'flex', gap: '8px', padding: '12px 20px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.01)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
           {[
             { id: 'details', label: 'Lead Overview', icon: '📋' },
             { id: 'personal_notes', label: `Personal Notes (${personalNotes.length})`, icon: '🔒' },
@@ -311,6 +294,7 @@ export default function LeadDetailModal({
                 borderRadius: 'var(--radius-md)',
                 fontSize: '0.86rem',
                 fontWeight: 600,
+                flexShrink: 0,
                 background: activeTab === t.id ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
                 color: activeTab === t.id ? '#ffffff' : 'var(--text-secondary)',
                 border: activeTab === t.id ? '1px solid #818cf8' : '1px solid transparent',
@@ -322,7 +306,7 @@ export default function LeadDetailModal({
         </div>
 
         {/* Body Area */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px' }}>
           {loading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
               Loading lead data...
@@ -333,7 +317,7 @@ export default function LeadDetailModal({
               {activeTab === 'details' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   {/* Attribution Banner */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', padding: '16px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', padding: '16px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
                     <div>
                       <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Lead Origin / Creator</span>
                       <strong style={{ color: 'var(--text-primary)' }}>{lead?.owner_name}</strong>
@@ -361,7 +345,7 @@ export default function LeadDetailModal({
                   </div>
 
                   {/* Contact Details */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
                     <div className="glass-panel" style={{ padding: '16px' }}>
                       <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#38bdf8', marginBottom: '8px' }}>SPOC Details</h4>
                       <p><strong>{lead?.spoc_name}</strong> ({lead?.spoc_role})</p>

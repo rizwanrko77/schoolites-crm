@@ -186,7 +186,7 @@ export default function BusinessRelationsPage() {
         </button>
       }
     >
-      <div style={{ minHeight: '100%', padding: '28px 36px', maxWidth: '1360px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div className="workspace-container">
         {/* Toast Alert */}
         {toastMsg && (
           <div
@@ -273,7 +273,7 @@ export default function BusinessRelationsPage() {
 
       {/* Leads Table */}
       <div className="glass-panel" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-responsive">
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>

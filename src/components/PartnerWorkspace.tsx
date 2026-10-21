@@ -283,7 +283,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
         </button>
       }
     >
-      <div style={{ minHeight: '100%', padding: '28px 36px', maxWidth: '1360px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div className="workspace-container">
         {/* Toast Alert */}
         {toastMsg && (
           <div
@@ -384,7 +384,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
             </span>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-responsive">
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
@@ -504,7 +504,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
             </span>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-responsive">
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
@@ -599,7 +599,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
 
       {/* TAB 3: MARKETING ASSETS */}
       {activeTab === 'assets' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '22px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '20px' }}>
           {assets.map((asset) => {
             const hasMultiFiles = Array.isArray(asset.files) && asset.files.length > 0;
             const activeIndex = cardImageIndices[asset.id] || 0;
