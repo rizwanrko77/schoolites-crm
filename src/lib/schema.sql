@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS leads (
     decision_flow TEXT,
     preferred_slot_date DATE,
     preferred_slot_time VARCHAR(50),
-    preferred_slot_mode VARCHAR(50) CHECK (preferred_slot_mode IN ('Call', 'Meeting', 'Other')),
+    preferred_slot_mode VARCHAR(50) CHECK (preferred_slot_mode IN ('Phone/WhatsApp Call', 'Virtual Meet', 'Unsure', 'Call', 'Meeting', 'Other')),
     additional_details TEXT,
     
     -- Status & Valuation

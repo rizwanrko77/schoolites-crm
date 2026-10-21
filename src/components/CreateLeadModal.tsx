@@ -1,6 +1,30 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { COUNTRIES } from '@/lib/countries';
+
+const STUDENT_STRENGTH_OPTIONS = [
+  'Below 500',
+  '500 - 1000',
+  '1000 - 2000',
+  '2000 - 3000',
+  '3000 - 4000',
+  '4000+',
+];
+
+function mapStudentStrength(val: string | number | null | undefined): string {
+  if (!val) return '500 - 1000';
+  const str = String(val).trim();
+  if (STUDENT_STRENGTH_OPTIONS.includes(str)) return str;
+  const num = parseInt(str.replace(/[^0-9]/g, ''), 10);
+  if (isNaN(num)) return '500 - 1000';
+  if (num < 500) return 'Below 500';
+  if (num <= 1000) return '500 - 1000';
+  if (num <= 2000) return '1000 - 2000';
+  if (num <= 3000) return '2000 - 3000';
+  if (num <= 4000) return '3000 - 4000';
+  return '4000+';
+}
 
 interface CreateLeadModalProps {
   isOpen: boolean;
@@ -20,7 +44,7 @@ export default function CreateLeadModal({
     institute_name: '',
     country: 'India',
     city: '',
-    student_strength: '',
+    student_strength: '500 - 1000',
     current_erp: 'unsure',
     current_erp_name: '',
     spoc_name: '',
@@ -39,13 +63,29 @@ export default function CreateLeadModal({
     decision_flow: '',
     preferred_slot_date: '',
     preferred_slot_time: '11:00 AM',
-    preferred_slot_mode: 'Call',
+    preferred_slot_mode: 'Phone/WhatsApp Call',
     deal_value: '',
     additional_details: '',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Searchable Country Dropdown State
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+  const countryDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Close country dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(event.target as Node)) {
+        setIsCountryOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Pre-fill if enquiry is passed
   useEffect(() => {
@@ -57,7 +97,7 @@ export default function CreateLeadModal({
         institute_name: initialEnquiry.institute_name || '',
         country: initialEnquiry.country || 'India',
         city: initialEnquiry.city || '',
-        student_strength: initialEnquiry.student_count || '',
+        student_strength: mapStudentStrength(initialEnquiry.student_count),
         spoc_name: initialEnquiry.spoc_name || '',
         spoc_phone: initialEnquiry.phone || '',
         spoc_email: initialEnquiry.email || '',
@@ -65,6 +105,7 @@ export default function CreateLeadModal({
       }));
     }
   }, [initialEnquiry]);
+
 
   if (!isOpen) return null;
 
@@ -209,17 +250,99 @@ export default function CreateLeadModal({
                 />
               </div>
 
-              <div>
+              <div ref={countryDropdownRef} style={{ position: 'relative' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                   Country *
                 </label>
-                <input
-                  type="text"
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                <div
+                  onClick={() => {
+                    setIsCountryOpen(!isCountryOpen);
+                    setCountrySearch('');
+                  }}
                   className="input-field"
-                  required
-                />
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    background: '#0f172a',
+                    userSelect: 'none',
+                  }}
+                >
+                  <span style={{ color: formData.country ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    {formData.country || 'India'}
+                  </span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{isCountryOpen ? '▲' : '▼'}</span>
+                </div>
+
+                {isCountryOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      right: 0,
+                      zIndex: 100,
+                      background: '#090d16',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: '0 12px 30px rgba(0,0,0,0.85)',
+                      padding: '8px',
+                      animation: 'fadeIn 0.15s ease',
+                    }}
+                  >
+                    <div style={{ marginBottom: '6px' }}>
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="🔍 Search country..."
+                        value={countrySearch}
+                        onChange={(e) => setCountrySearch(e.target.value)}
+                        className="input-field"
+                        style={{ padding: '8px 12px', fontSize: '0.84rem', width: '100%', background: '#0f172a' }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      {COUNTRIES.filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase())).length === 0 ? (
+                        <div style={{ padding: '10px', fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                          No matching country
+                        </div>
+                      ) : (
+                        COUNTRIES.filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase())).map((c) => (
+                          <div
+                            key={c}
+                            onClick={() => {
+                              setFormData((prev: any) => ({ ...prev, country: c }));
+                              setIsCountryOpen(false);
+                            }}
+                            style={{
+                              padding: '8px 12px',
+                              fontSize: '0.84rem',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              background: formData.country === c ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
+                              color: formData.country === c ? '#c7d2fe' : 'var(--text-primary)',
+                              fontWeight: formData.country === c ? 600 : 400,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (formData.country !== c) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (formData.country !== c) e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <span>{c}</span>
+                            {formData.country === c && <span style={{ color: '#818cf8', fontSize: '0.8rem' }}>✓</span>}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -240,14 +363,19 @@ export default function CreateLeadModal({
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                   Student Strength *
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 1500 - 2500"
+                <select
                   value={formData.student_strength}
                   onChange={(e) => setFormData({ ...formData, student_strength: e.target.value })}
                   className="input-field"
+                  style={{ background: '#0f172a' }}
                   required
-                />
+                >
+                  {STUDENT_STRENGTH_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -477,9 +605,9 @@ export default function CreateLeadModal({
                   className="input-field"
                   style={{ background: '#0f172a' }}
                 >
-                  <option value="Call">Phone Call</option>
-                  <option value="Meeting">Video / Campus Meeting</option>
-                  <option value="Other">Other</option>
+                  <option value="Phone/WhatsApp Call">Phone/WhatsApp Call</option>
+                  <option value="Virtual Meet">Virtual Meet</option>
+                  <option value="Unsure">Unsure</option>
                 </select>
               </div>
 

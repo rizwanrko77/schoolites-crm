@@ -68,13 +68,13 @@ graph TD
 * **Institute Info:** Type\* (School, College, Institution, University, Other), Name of Org\*, Country\*, City, Student Count, Website, Message
 
 ### Lead Qualification Form
-* **Institute Info:** Type\*, Name\*, Country\*, City\*, Student Strength\*, Current ERP\* (Yes / No / Unsure - if yes, which one)
+* **Institute Info:** Type\*, Name\*, Country\* (Searchable dropdown with auto-filter, default India, excludes Pakistan), City\*, Student Strength\* (Dropdown brackets: Below 500, 500 - 1000, 1000 - 2000, 2000 - 3000, 3000 - 4000, 4000+), Current ERP\* (Yes / No / Unsure - if yes, which one)
 * **Contact Details:**
   * **SPOC\*:** Name, Role/Designation, Mobile/WhatsApp, Email
   * **Decision Maker\*:** Name, Role/Designation, Mobile/WhatsApp, Email (checkbox to copy SPOC)
   * **Additional Contact:** ERP Admin / IT Head info
 * **Decision Flow:** Multiline text input
-* **Preferred Connect Slot:** Date, Time, Mode (Call / Meeting)
+* **Preferred Connect Slot:** Date, Time, Mode (Phone/WhatsApp Call [default] / Virtual Meet / Unsure)
 * **Additional Details**
 
 ---
@@ -101,6 +101,7 @@ graph TD
 | **Partner Workspace Alignment** | Synchronized Pre-Sales and Referral Partner asset views with Admin (inline carousels, lightbox zoom, monospace body text copy, single/all download prompts) | ✅ Complete |
 | **Card Layout Polish** | 2-line instruction clamp with inline toggle (`Show full instructions ▼ / Show less ▲`) + auto-adjustable body pitch text box (`flex: 1` consuming empty voids on text cards) | ✅ Complete |
 | **Interactive Asset Image Manager** | Edit modal shows active thumbnails with individual `✕` removal, remaining slot counter, and targeted Neon S3 deletion of removed objects | ✅ Complete |
+| **Lead Form Enhancements** | Searchable country select (defaults India, strictly excludes Pakistan), student strength bracket dropdown (`Below 500` to `4000+`), and preferred mode options (`Phone/WhatsApp Call`, `Virtual Meet`, `Unsure`) | ✅ Complete |
 | **Version Control Sync** | Connected to GitHub (`https://github.com/rizwanrko77/schoolites-crm.git`) on `main` branch with strictly ignored `.env.local` | ✅ Complete |
 | **Phase 5** | Google Places API (New) integration with strict field masking, staging deduplication, and batch lead release | ⏳ Ready to build |
 | **Phase 6** | Deal settlement & bank UTR reference tracking in `/admin/incentives` | ⏳ Ready to build |

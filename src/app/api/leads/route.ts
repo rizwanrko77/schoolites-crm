@@ -132,8 +132,10 @@ export async function POST(req: NextRequest) {
     const rawErp = current_erp ? String(current_erp).toLowerCase().trim() : 'unsure';
     const finalCurrentErp = ['yes', 'no', 'unsure'].includes(rawErp) ? rawErp : 'unsure';
 
-    const rawMode = preferred_slot_mode ? String(preferred_slot_mode).trim() : 'Call';
-    const finalSlotMode = ['Call', 'Meeting', 'Other'].includes(rawMode) ? rawMode : 'Call';
+    const rawMode = preferred_slot_mode ? String(preferred_slot_mode).trim() : 'Phone/WhatsApp Call';
+    const validModes = ['Phone/WhatsApp Call', 'Virtual Meet', 'Unsure', 'Call', 'Meeting', 'Other'];
+    const finalSlotMode = validModes.includes(rawMode) ? rawMode : 'Phone/WhatsApp Call';
+
 
     // 1. Duplicate Detection Check
     // Checks if spoc_phone or spoc_email already exists in leads table
