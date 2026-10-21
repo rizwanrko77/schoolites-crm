@@ -123,6 +123,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'SPOC Phone must be at least 7 numeric digits.' }, { status: 400 });
     }
 
+    // Dynamic requirement check against form_field_configs
+    try {
+      const requiredFields = await sql`
+        SELECT field_key, label 
+        FROM form_field_configs 
+        WHERE form_type = 'lead' AND is_visible = TRUE AND is_required = TRUE
+      `;
+      for (const rf of requiredFields) {
+        const key = rf.field_key;
+        if (Boolean(dm_same_as_spoc) && key.startsWith('dm_')) continue;
+        if (key.startsWith('additional_contact_') && !additional_contact_name && !additional_contact_phone) continue;
+        const val = (body as any)[key];
+        if (val === undefined || val === null || String(val).trim() === '') {
+          return NextResponse.json({ error: `${rf.label} is required.` }, { status: 400 });
+        }
+      }
+    } catch (cfgErr) {
+      console.warn('Could not validate dynamic lead configs:', cfgErr);
+    }
+
     // Resolve Decision Maker details if same_as_spoc is true
     const finalDmName = dm_same_as_spoc ? spoc_name : (dm_name || spoc_name);
     const finalDmRole = dm_same_as_spoc ? spoc_role : (dm_role || spoc_role);

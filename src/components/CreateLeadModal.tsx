@@ -104,6 +104,65 @@ export default function CreateLeadModal({
   const [countrySearch, setCountrySearch] = useState('');
   const countryDropdownRef = useRef<HTMLDivElement | null>(null);
 
+  // Dynamic Admin Form Field Configurations State
+  interface FieldConfig {
+    field_key: string;
+    label: string;
+    category: string;
+    field_type: string;
+    options: string[];
+    is_visible: boolean;
+    is_required: boolean;
+  }
+
+  const [fieldConfigs, setFieldConfigs] = useState<Record<string, FieldConfig>>({});
+
+  // Core fields that must never be hidden to maintain CRM integrity
+  const CORE_REQUIRED_FIELDS = ['institute_name', 'spoc_name', 'spoc_phone'];
+
+  const isVisible = (key: string, defaultVal = true): boolean => {
+    if (CORE_REQUIRED_FIELDS.includes(key)) return true;
+    if (fieldConfigs[key]) return fieldConfigs[key].is_visible;
+    return defaultVal;
+  };
+
+  const isRequired = (key: string, defaultVal = false): boolean => {
+    if (CORE_REQUIRED_FIELDS.includes(key)) return true;
+    if (fieldConfigs[key]) return fieldConfigs[key].is_required;
+    return defaultVal;
+  };
+
+  const isAnyVisible = (keys: string[]): boolean => keys.some((k) => isVisible(k));
+
+  // Fetch lead field configs from /api/leads/config when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let mounted = true;
+    async function loadConfigs() {
+      try {
+        const res = await fetch('/api/leads/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted && Array.isArray(data.configs)) {
+            const map: Record<string, FieldConfig> = {};
+            data.configs.forEach((c: FieldConfig) => {
+              map[c.field_key] = c;
+            });
+            setFieldConfigs(map);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load lead field configs, using defaults', err);
+      }
+    }
+
+    loadConfigs();
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
+
   // Close country dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -211,6 +270,20 @@ export default function CreateLeadModal({
       return;
     }
 
+    // Dynamic Validation against Admin Form Field Configurations
+    for (const [key, cfg] of Object.entries(fieldConfigs)) {
+      if (cfg.is_visible && cfg.is_required) {
+        if (formData.dm_same_as_spoc && key.startsWith('dm_')) continue;
+        if (key.startsWith('additional_contact_') && !showAdditionalContact) continue;
+
+        const val = formData[key];
+        if (val === undefined || val === null || String(val).trim() === '') {
+          setError(`${cfg.label || key} is mandatory.`);
+          return;
+        }
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/leads', {
@@ -273,23 +346,26 @@ export default function CreateLeadModal({
             </h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Institute Type *
-                </label>
-                <select
-                  value={formData.institute_type}
-                  onChange={(e) => setFormData({ ...formData, institute_type: e.target.value })}
-                  className="input-field"
-                  style={{ background: '#0f172a' }}
-                >
-                  <option value="School">School</option>
-                  <option value="College">College</option>
-                  <option value="Institution">Institution</option>
-                  <option value="University">University</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
+              {isVisible('institute_type') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    Institute Type {isRequired('institute_type', true) ? '*' : ''}
+                  </label>
+                  <select
+                    value={formData.institute_type}
+                    onChange={(e) => setFormData({ ...formData, institute_type: e.target.value })}
+                    className="input-field"
+                    style={{ background: '#0f172a' }}
+                    required={isRequired('institute_type', true)}
+                  >
+                    <option value="School">School</option>
+                    <option value="College">College</option>
+                    <option value="Institution">Institution</option>
+                    <option value="University">University</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              )}
 
               <div className="col-span-2-responsive">
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
@@ -305,149 +381,157 @@ export default function CreateLeadModal({
                 />
               </div>
 
-              <div ref={countryDropdownRef} style={{ position: 'relative' }}>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Country *
-                </label>
-                <div
-                  onClick={() => {
-                    setIsCountryOpen(!isCountryOpen);
-                    setCountrySearch('');
-                  }}
-                  className="input-field"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    background: '#0f172a',
-                    userSelect: 'none',
-                  }}
-                >
-                  <span style={{ color: formData.country ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                    {formData.country || 'India'}
-                  </span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{isCountryOpen ? '▲' : '▼'}</span>
-                </div>
-
-                {isCountryOpen && (
+              {isVisible('country') && (
+                <div ref={countryDropdownRef} style={{ position: 'relative' }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    Country {isRequired('country', true) ? '*' : ''}
+                  </label>
                   <div
+                    onClick={() => {
+                      setIsCountryOpen(!isCountryOpen);
+                      setCountrySearch('');
+                    }}
+                    className="input-field"
                     style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 4px)',
-                      left: 0,
-                      right: 0,
-                      zIndex: 100,
-                      background: '#090d16',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-md)',
-                      boxShadow: '0 12px 30px rgba(0,0,0,0.85)',
-                      padding: '8px',
-                      animation: 'fadeIn 0.15s ease',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      background: '#0f172a',
+                      userSelect: 'none',
                     }}
                   >
-                    <div style={{ marginBottom: '6px' }}>
-                      <input
-                        type="text"
-                        autoFocus
-                        placeholder="🔍 Search country..."
-                        value={countrySearch}
-                        onChange={(e) => setCountrySearch(e.target.value)}
-                        className="input-field"
-                        style={{ padding: '8px 12px', fontSize: '0.84rem', width: '100%', background: '#0f172a' }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                      {COUNTRIES.filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase())).length === 0 ? (
-                        <div style={{ padding: '10px', fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                          No matching country
-                        </div>
-                      ) : (
-                        COUNTRIES.filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase())).map((c) => (
-                          <div
-                            key={c}
-                            onClick={() => {
-                              setFormData((prev: any) => ({ ...prev, country: c }));
-                              setIsCountryOpen(false);
-                            }}
-                            style={{
-                              padding: '8px 12px',
-                              fontSize: '0.84rem',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              background: formData.country === c ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
-                              color: formData.country === c ? '#c7d2fe' : 'var(--text-primary)',
-                              fontWeight: formData.country === c ? 600 : 400,
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                            }}
-                            onMouseEnter={(e) => {
-                              if (formData.country !== c) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                            }}
-                            onMouseLeave={(e) => {
-                              if (formData.country !== c) e.currentTarget.style.background = 'transparent';
-                            }}
-                          >
-                            <span>{c}</span>
-                            {formData.country === c && <span style={{ color: '#818cf8', fontSize: '0.8rem' }}>✓</span>}
-                          </div>
-                        ))
-                      )}
-                    </div>
+                    <span style={{ color: formData.country ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                      {formData.country || 'India'}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{isCountryOpen ? '▲' : '▼'}</span>
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  City *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Mumbai"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="input-field"
-                  required
-                />
-              </div>
+                  {isCountryOpen && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 4px)',
+                        left: 0,
+                        right: 0,
+                        zIndex: 100,
+                        background: '#090d16',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-md)',
+                        boxShadow: '0 12px 30px rgba(0,0,0,0.85)',
+                        padding: '8px',
+                        animation: 'fadeIn 0.15s ease',
+                      }}
+                    >
+                      <div style={{ marginBottom: '6px' }}>
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="🔍 Search country..."
+                          value={countrySearch}
+                          onChange={(e) => setCountrySearch(e.target.value)}
+                          className="input-field"
+                          style={{ padding: '8px 12px', fontSize: '0.84rem', width: '100%', background: '#0f172a' }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                        {COUNTRIES.filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase())).length === 0 ? (
+                          <div style={{ padding: '10px', fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                            No matching country
+                          </div>
+                        ) : (
+                          COUNTRIES.filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase())).map((c) => (
+                            <div
+                              key={c}
+                              onClick={() => {
+                                setFormData((prev: any) => ({ ...prev, country: c }));
+                                setIsCountryOpen(false);
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                fontSize: '0.84rem',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                background: formData.country === c ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
+                                color: formData.country === c ? '#c7d2fe' : 'var(--text-primary)',
+                                fontWeight: formData.country === c ? 600 : 400,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                              }}
+                              onMouseEnter={(e) => {
+                                if (formData.country !== c) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (formData.country !== c) e.currentTarget.style.background = 'transparent';
+                              }}
+                            >
+                              <span>{c}</span>
+                              {formData.country === c && <span style={{ color: '#818cf8', fontSize: '0.8rem' }}>✓</span>}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Student Strength *
-                </label>
-                <select
-                  value={formData.student_strength}
-                  onChange={(e) => setFormData({ ...formData, student_strength: e.target.value })}
-                  className="input-field"
-                  style={{ background: '#0f172a' }}
-                  required
-                >
-                  {STUDENT_STRENGTH_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {isVisible('city') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    City {isRequired('city', true) ? '*' : ''}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mumbai"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    className="input-field"
+                    required={isRequired('city', true)}
+                  />
+                </div>
+              )}
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Current ERP System *
-                </label>
-                <select
-                  value={formData.current_erp}
-                  onChange={(e) => setFormData({ ...formData, current_erp: e.target.value })}
-                  className="input-field"
-                  style={{ background: '#0f172a' }}
-                >
-                  <option value="yes">YES (Active System)</option>
-                  <option value="no">NO (None)</option>
-                  <option value="unsure">Unsure</option>
-                </select>
-              </div>
+              {isVisible('student_strength') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    Student Strength {isRequired('student_strength', true) ? '*' : ''}
+                  </label>
+                  <select
+                    value={formData.student_strength}
+                    onChange={(e) => setFormData({ ...formData, student_strength: e.target.value })}
+                    className="input-field"
+                    style={{ background: '#0f172a' }}
+                    required={isRequired('student_strength', true)}
+                  >
+                    {STUDENT_STRENGTH_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {isVisible('current_erp') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    Current ERP System {isRequired('current_erp', true) ? '*' : ''}
+                  </label>
+                  <select
+                    value={formData.current_erp}
+                    onChange={(e) => setFormData({ ...formData, current_erp: e.target.value })}
+                    className="input-field"
+                    style={{ background: '#0f172a' }}
+                  >
+                    <option value="yes">YES (Active System)</option>
+                    <option value="no">NO (None)</option>
+                    <option value="unsure">Unsure</option>
+                  </select>
+                </div>
+              )}
 
               {formData.current_erp === 'yes' && (
                 <div>
@@ -488,20 +572,22 @@ export default function CreateLeadModal({
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  SPOC Designation *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Principal, Director, Admin Head"
-                  value={formData.spoc_role}
-                  onChange={(e) => setFormData({ ...formData, spoc_role: e.target.value })}
-                  className="input-field"
-                  autoComplete="off"
-                  required
-                />
-              </div>
+              {isVisible('spoc_role') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    SPOC Designation {isRequired('spoc_role', true) ? '*' : ''}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Principal, Director, Admin Head"
+                    value={formData.spoc_role}
+                    onChange={(e) => setFormData({ ...formData, spoc_role: e.target.value })}
+                    className="input-field"
+                    autoComplete="off"
+                    required={isRequired('spoc_role', true)}
+                  />
+                </div>
+              )}
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
@@ -518,356 +604,404 @@ export default function CreateLeadModal({
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  SPOC Email
-                </label>
-                <input
-                  type="email"
-                  placeholder="spoc@institution.edu"
-                  value={formData.spoc_email}
-                  onChange={(e) => setFormData({ ...formData, spoc_email: e.target.value })}
-                  className="input-field"
-                />
-              </div>
-            </div>
-
-            {/* Checkbox: Same as SPOC */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 14px',
-                background: 'rgba(99, 102, 241, 0.08)',
-                borderRadius: 'var(--radius-sm)',
-                marginBottom: '16px',
-              }}
-            >
-              <input
-                id="dm-same-checkbox"
-                type="checkbox"
-                checked={formData.dm_same_as_spoc}
-                onChange={(e) => setFormData({ ...formData, dm_same_as_spoc: e.target.checked })}
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-              />
-              <label htmlFor="dm-same-checkbox" style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', color: 'var(--text-primary)' }}>
-                Decision Maker is the Same Person as SPOC
-              </label>
-            </div>
-
-            {/* Decision Maker if different */}
-            {!formData.dm_same_as_spoc && (
-              <div className="contact-grid-2col" style={{ marginBottom: '16px', padding: '14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)' }}>
+              {isVisible('spoc_email') && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                    Decision Maker Name *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Trustee / Chairperson / Director"
-                    value={formData.dm_name}
-                    onChange={(e) => setFormData({ ...formData, dm_name: e.target.value })}
-                    className="input-field"
-                    required={!formData.dm_same_as_spoc}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                    DM Designation *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Managing Trustee, Chairperson, Director"
-                    value={formData.dm_role}
-                    onChange={(e) => setFormData({ ...formData, dm_role: e.target.value })}
-                    className="input-field"
-                    autoComplete="off"
-                    required={!formData.dm_same_as_spoc}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                    DM Mobile / WhatsApp *
-                  </label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    placeholder="Direct mobile number"
-                    value={formData.dm_phone}
-                    onChange={(e) => setFormData({ ...formData, dm_phone: e.target.value.replace(/[^0-9]/g, '') })}
-                    className="input-field"
-                    required={!formData.dm_same_as_spoc}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                    DM Email
+                    SPOC Email {isRequired('spoc_email', false) ? '*' : ''}
                   </label>
                   <input
                     type="email"
-                    placeholder="dm@institution.edu"
-                    value={formData.dm_email}
-                    onChange={(e) => setFormData({ ...formData, dm_email: e.target.value })}
+                    placeholder="spoc@institution.edu"
+                    value={formData.spoc_email}
+                    onChange={(e) => setFormData({ ...formData, spoc_email: e.target.value })}
                     className="input-field"
+                    required={isRequired('spoc_email', false)}
                   />
-                </div>
-              </div>
-            )}
-
-            {/* Optional Additional Contact Person */}
-            <div style={{ marginTop: '14px' }}>
-              {!showAdditionalContact ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAdditionalContact(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 14px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'rgba(99, 102, 241, 0.08)',
-                    border: '1px dashed rgba(99, 102, 241, 0.35)',
-                    color: '#818cf8',
-                    fontSize: '0.84rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)';
-                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.6)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)';
-                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.35)';
-                  }}
-                >
-                  <span style={{ fontSize: '1.05rem', lineHeight: 1 }}>+</span>
-                  <span>Add Additional Contact Details</span>
-                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    (Optional — IT Coordinator, Vice Principal, Admin, etc.)
-                  </span>
-                </button>
-              ) : (
-                <div
-                  style={{
-                    padding: '16px',
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-md)',
-                    animation: 'fadeIn 0.2s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.95rem' }}>👤</span>
-                      <span style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        Additional Contact Person (Optional)
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAdditionalContact(false);
-                        setFormData((prev: any) => ({
-                          ...prev,
-                          additional_contact_name: '',
-                          additional_contact_role: '',
-                          additional_contact_phone: '',
-                          additional_contact_email: '',
-                        }));
-                      }}
-                      style={{
-                        fontSize: '0.78rem',
-                        color: '#f87171',
-                        cursor: 'pointer',
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.2)',
-                      }}
-                    >
-                      ✕ Remove
-                    </button>
-                  </div>
-
-                  <div className="contact-grid-2col">
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                        Contact Person Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Mr. Ramesh Sharma"
-                        value={formData.additional_contact_name}
-                        onChange={(e) => setFormData({ ...formData, additional_contact_name: e.target.value })}
-                        className="input-field"
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                        Designation / Role
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. IT Coordinator / Vice Principal"
-                        value={formData.additional_contact_role}
-                        onChange={(e) => setFormData({ ...formData, additional_contact_role: e.target.value })}
-                        className="input-field"
-                        autoComplete="off"
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                        Mobile / WhatsApp
-                      </label>
-                      <input
-                        type="tel"
-                        inputMode="numeric"
-                        placeholder="Direct contact number"
-                        value={formData.additional_contact_phone}
-                        onChange={(e) => setFormData({ ...formData, additional_contact_phone: e.target.value.replace(/[^0-9]/g, '') })}
-                        className="input-field"
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        placeholder="contact@institution.edu"
-                        value={formData.additional_contact_email}
-                        onChange={(e) => setFormData({ ...formData, additional_contact_email: e.target.value })}
-                        className="input-field"
-                      />
-                    </div>
-                  </div>
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Section 3: Decision Flow & Preferred Connect Slot */}
-          <div>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#c7d2fe', marginBottom: '12px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
-              3. Pipeline Flow & Preferred Connect Slot
-            </h3>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Preferred Slot Date
-                </label>
+            {/* Checkbox: Same as SPOC */}
+            {isVisible('dm_same_as_spoc') && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 14px',
+                  background: 'rgba(99, 102, 241, 0.08)',
+                  borderRadius: 'var(--radius-sm)',
+                  marginBottom: '16px',
+                }}
+              >
                 <input
-                  type="date"
-                  value={formData.preferred_slot_date}
-                  onChange={(e) => setFormData({ ...formData, preferred_slot_date: e.target.value })}
-                  className="input-field"
-                  style={{ colorScheme: 'dark' }}
+                  id="dm-same-checkbox"
+                  type="checkbox"
+                  checked={formData.dm_same_as_spoc}
+                  onChange={(e) => setFormData({ ...formData, dm_same_as_spoc: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                 />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Preferred Slot Time
+                <label htmlFor="dm-same-checkbox" style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', color: 'var(--text-primary)' }}>
+                  Decision Maker is the Same Person as SPOC
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 11:30 AM or 3:00 PM"
-                  value={formData.preferred_slot_time}
-                  onChange={(e) => setFormData({ ...formData, preferred_slot_time: e.target.value })}
-                  className="input-field"
-                />
               </div>
+            )}
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Preferred Mode
-                </label>
-                <select
-                  value={formData.preferred_slot_mode}
-                  onChange={(e) => setFormData({ ...formData, preferred_slot_mode: e.target.value })}
-                  className="input-field"
-                  style={{ background: '#0f172a' }}
-                >
-                  <option value="Phone/WhatsApp Call">Phone/WhatsApp Call</option>
-                  <option value="Virtual Meet">Virtual Meet</option>
-                  <option value="Unsure">Unsure</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Expected Start Date
-                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '6px' }}>
-                    (How early/late ERP in use)
-                  </span>
-                </label>
-                <select
-                  value={startPreset}
-                  onChange={(e) => handleStartPresetChange(e.target.value)}
-                  className="input-field"
-                  style={{ background: '#0f172a' }}
-                >
-                  {EXPECTED_START_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-
-                {startPreset === 'Specific Date...' && (
-                  <div style={{ marginTop: '8px', animation: 'fadeIn 0.15s ease' }}>
+            {/* Decision Maker if different */}
+            {!formData.dm_same_as_spoc && isAnyVisible(['dm_name', 'dm_role', 'dm_phone', 'dm_email']) && (
+              <div className="contact-grid-2col" style={{ marginBottom: '16px', padding: '14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)' }}>
+                {isVisible('dm_name') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      Decision Maker Name {isRequired('dm_name', true) ? '*' : ''}
+                    </label>
                     <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => handleCustomDateChange(e.target.value)}
+                      type="text"
+                      placeholder="Trustee / Chairperson / Director"
+                      value={formData.dm_name}
+                      onChange={(e) => setFormData({ ...formData, dm_name: e.target.value })}
                       className="input-field"
-                      style={{ colorScheme: 'dark', background: '#0f172a' }}
-                      required={startPreset === 'Specific Date...'}
+                      required={!formData.dm_same_as_spoc && isRequired('dm_name', true)}
+                    />
+                  </div>
+                )}
+
+                {isVisible('dm_role') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      DM Designation {isRequired('dm_role', true) ? '*' : ''}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Managing Trustee, Chairperson, Director"
+                      value={formData.dm_role}
+                      onChange={(e) => setFormData({ ...formData, dm_role: e.target.value })}
+                      className="input-field"
+                      autoComplete="off"
+                      required={!formData.dm_same_as_spoc && isRequired('dm_role', true)}
+                    />
+                  </div>
+                )}
+
+                {isVisible('dm_phone') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      DM Mobile / WhatsApp {isRequired('dm_phone', true) ? '*' : ''}
+                    </label>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="Direct mobile number"
+                      value={formData.dm_phone}
+                      onChange={(e) => setFormData({ ...formData, dm_phone: e.target.value.replace(/[^0-9]/g, '') })}
+                      className="input-field"
+                      required={!formData.dm_same_as_spoc && isRequired('dm_phone', true)}
+                    />
+                  </div>
+                )}
+
+                {isVisible('dm_email') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      DM Email {isRequired('dm_email', false) ? '*' : ''}
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="dm@institution.edu"
+                      value={formData.dm_email}
+                      onChange={(e) => setFormData({ ...formData, dm_email: e.target.value })}
+                      className="input-field"
+                      required={!formData.dm_same_as_spoc && isRequired('dm_email', false)}
                     />
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                Decision Flow & Institutional Context
-              </label>
-              <textarea
-                rows={2}
-                placeholder="e.g. Principal evaluates feature fit, Chairman signs commercial agreement..."
-                value={formData.decision_flow}
-                onChange={(e) => setFormData({ ...formData, decision_flow: e.target.value })}
-                className="input-field"
-                style={{ resize: 'vertical' }}
-              />
-            </div>
+            {/* Optional Additional Contact Person */}
+            {isAnyVisible(['additional_contact_name', 'additional_contact_role', 'additional_contact_phone', 'additional_contact_email']) && (
+              <div style={{ marginTop: '14px' }}>
+                {!showAdditionalContact ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdditionalContact(true)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(99, 102, 241, 0.08)',
+                      border: '1px dashed rgba(99, 102, 241, 0.35)',
+                      color: '#818cf8',
+                      fontSize: '0.84rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)';
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)';
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.35)';
+                    }}
+                  >
+                    <span style={{ fontSize: '1.05rem', lineHeight: 1 }}>+</span>
+                    <span>Add Additional Contact Details</span>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                      (Optional — IT Coordinator, Vice Principal, Admin, etc.)
+                    </span>
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      padding: '16px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      animation: 'fadeIn 0.2s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '0.95rem' }}>👤</span>
+                        <span style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          Additional Contact Person (Optional)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAdditionalContact(false);
+                          setFormData((prev: any) => ({
+                            ...prev,
+                            additional_contact_name: '',
+                            additional_contact_role: '',
+                            additional_contact_phone: '',
+                            additional_contact_email: '',
+                          }));
+                        }}
+                        style={{
+                          fontSize: '0.78rem',
+                          color: '#f87171',
+                          cursor: 'pointer',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.2)',
+                        }}
+                      >
+                        ✕ Remove
+                      </button>
+                    </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                Additional Details
-              </label>
-              <textarea
-                rows={2}
-                placeholder="Any special remarks or background context..."
-                value={formData.additional_details}
-                onChange={(e) => setFormData({ ...formData, additional_details: e.target.value })}
-                className="input-field"
-                style={{ resize: 'vertical' }}
-              />
-            </div>
+                    <div className="contact-grid-2col">
+                      {isVisible('additional_contact_name') && (
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                            Contact Person Name {isRequired('additional_contact_name', false) ? '*' : ''}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Mr. Ramesh Sharma"
+                            value={formData.additional_contact_name}
+                            onChange={(e) => setFormData({ ...formData, additional_contact_name: e.target.value })}
+                            className="input-field"
+                            required={showAdditionalContact && isRequired('additional_contact_name', false)}
+                          />
+                        </div>
+                      )}
+
+                      {isVisible('additional_contact_role') && (
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                            Designation / Role {isRequired('additional_contact_role', false) ? '*' : ''}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. IT Coordinator / Vice Principal"
+                            value={formData.additional_contact_role}
+                            onChange={(e) => setFormData({ ...formData, additional_contact_role: e.target.value })}
+                            className="input-field"
+                            autoComplete="off"
+                            required={showAdditionalContact && isRequired('additional_contact_role', false)}
+                          />
+                        </div>
+                      )}
+
+                      {isVisible('additional_contact_phone') && (
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                            Mobile / WhatsApp {isRequired('additional_contact_phone', false) ? '*' : ''}
+                          </label>
+                          <input
+                            type="tel"
+                            inputMode="numeric"
+                            placeholder="Direct contact number"
+                            value={formData.additional_contact_phone}
+                            onChange={(e) => setFormData({ ...formData, additional_contact_phone: e.target.value.replace(/[^0-9]/g, '') })}
+                            className="input-field"
+                            required={showAdditionalContact && isRequired('additional_contact_phone', false)}
+                          />
+                        </div>
+                      )}
+
+                      {isVisible('additional_contact_email') && (
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                            Email Address {isRequired('additional_contact_email', false) ? '*' : ''}
+                          </label>
+                          <input
+                            type="email"
+                            placeholder="contact@institution.edu"
+                            value={formData.additional_contact_email}
+                            onChange={(e) => setFormData({ ...formData, additional_contact_email: e.target.value })}
+                            className="input-field"
+                            required={showAdditionalContact && isRequired('additional_contact_email', false)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Section 3: Decision Flow & Preferred Connect Slot */}
+          {isAnyVisible(['preferred_slot_date', 'preferred_slot_time', 'preferred_slot_mode', 'expected_start_date', 'decision_flow', 'additional_details']) && (
+            <div>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#c7d2fe', marginBottom: '12px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
+                3. Pipeline Flow & Preferred Connect Slot
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+                {isVisible('preferred_slot_date') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      Preferred Slot Date {isRequired('preferred_slot_date', false) ? '*' : ''}
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.preferred_slot_date}
+                      onChange={(e) => setFormData({ ...formData, preferred_slot_date: e.target.value })}
+                      className="input-field"
+                      style={{ colorScheme: 'dark' }}
+                      required={isRequired('preferred_slot_date', false)}
+                    />
+                  </div>
+                )}
+
+                {isVisible('preferred_slot_time') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      Preferred Slot Time {isRequired('preferred_slot_time', false) ? '*' : ''}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 11:30 AM or 3:00 PM"
+                      value={formData.preferred_slot_time}
+                      onChange={(e) => setFormData({ ...formData, preferred_slot_time: e.target.value })}
+                      className="input-field"
+                      required={isRequired('preferred_slot_time', false)}
+                    />
+                  </div>
+                )}
+
+                {isVisible('preferred_slot_mode') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      Preferred Mode {isRequired('preferred_slot_mode', false) ? '*' : ''}
+                    </label>
+                    <select
+                      value={formData.preferred_slot_mode}
+                      onChange={(e) => setFormData({ ...formData, preferred_slot_mode: e.target.value })}
+                      className="input-field"
+                      style={{ background: '#0f172a' }}
+                      required={isRequired('preferred_slot_mode', false)}
+                    >
+                      <option value="Phone/WhatsApp Call">Phone/WhatsApp Call</option>
+                      <option value="Virtual Meet">Virtual Meet</option>
+                      <option value="Unsure">Unsure</option>
+                    </select>
+                  </div>
+                )}
+
+                {isVisible('expected_start_date') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      Expected Start Date {isRequired('expected_start_date', false) ? '*' : ''}
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '6px' }}>
+                        (How early/late ERP in use)
+                      </span>
+                    </label>
+                    <select
+                      value={startPreset}
+                      onChange={(e) => handleStartPresetChange(e.target.value)}
+                      className="input-field"
+                      style={{ background: '#0f172a' }}
+                      required={isRequired('expected_start_date', false)}
+                    >
+                      {EXPECTED_START_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+
+                    {startPreset === 'Specific Date...' && (
+                      <div style={{ marginTop: '8px', animation: 'fadeIn 0.15s ease' }}>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => handleCustomDateChange(e.target.value)}
+                          className="input-field"
+                          style={{ colorScheme: 'dark', background: '#0f172a' }}
+                          required={startPreset === 'Specific Date...'}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {isVisible('decision_flow') && (
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    Decision Flow & Institutional Context {isRequired('decision_flow', false) ? '*' : ''}
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Principal evaluates feature fit, Chairman signs commercial agreement..."
+                    value={formData.decision_flow}
+                    onChange={(e) => setFormData({ ...formData, decision_flow: e.target.value })}
+                    className="input-field"
+                    style={{ resize: 'vertical' }}
+                    required={isRequired('decision_flow', false)}
+                  />
+                </div>
+              )}
+
+              {isVisible('additional_details') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    Additional Details {isRequired('additional_details', false) ? '*' : ''}
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Any special remarks or background context..."
+                    value={formData.additional_details}
+                    onChange={(e) => setFormData({ ...formData, additional_details: e.target.value })}
+                    className="input-field"
+                    style={{ resize: 'vertical' }}
+                    required={isRequired('additional_details', false)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
             <button type="button" onClick={onClose} className="btn-secondary" disabled={isSubmitting}>
