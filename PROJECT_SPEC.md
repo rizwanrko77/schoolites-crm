@@ -167,6 +167,16 @@ graph TD
     * Implements a safe, non-blocking 2-stage inline confirmation (`Clear Form` -> `⚠️ Confirm Clear?`) that auto-reverts after 4 seconds to prevent accidental data loss.
     * Completely purges the local draft and resets all fields back to blank defaults (`Country: India`).
   * Admin Form Configurator (`/admin/forms` & `form_field_configs` table) synchronized with all 25 lead fields including `additional_contact_*` and `expected_start_date`.
+  * **Business Relations Portal Sectioned Architecture (`/business`):**
+    * **ActorShell Section Headers:** Extended `NavItem` with optional `section?: string`. Expanded sidebar displays clean uppercase section headers (`GLOBAL PIPELINE` & `MY DIRECT SOURCING`), while collapsed icon rail renders subtle horizontal dividers.
+    * **Section 1: Global Pipeline:**
+      * `⚡ Unassigned Pool`: Unclaimed company leads available for atomic grab.
+      * `🎯 Assigned to Me`: Active opportunities where user is assigned manager/closer.
+      * `🌐 All Leads Directory`: Company-wide lead directory for cross-team visibility.
+    * **Section 2: My Direct Sourcing & Inbound:**
+      * `📝 My Generated Leads`: Leads directly originated by the BR rep (`owner_id === user.id`) with closing stage & incentive attribution.
+      * `📥 Inbound Enquiries`: Captures inbound enquiries from rep's unique public referral link (`/e/[user_code]`), with status tracker (`new`, `contacted`, `qualified`, `disqualified`) and 1-click **Convert to Lead** workflow.
+      * `📁 Marketing Assets`: Full collateral hub with category filter pills, WhatsApp pitch copy, multi-image carousels, lightbox zoom, and brochure downloads.
 
 ---
 

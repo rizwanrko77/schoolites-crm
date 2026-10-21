@@ -278,7 +278,7 @@ export default function CreateLeadModal({
     } else {
       try {
         localStorage.removeItem(DRAFT_STORAGE_KEY);
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [formData, startPreset, customStartDate, showAdditionalContact, isOpen, initialEnquiry]);
 
@@ -299,7 +299,7 @@ export default function CreateLeadModal({
     setConfirmClear(false);
     try {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
-    } catch (e) {}
+    } catch (e) { }
     setFormData(INITIAL_BLANK_LEAD_FORM);
     setStartPreset('');
     setCustomStartDate('');
@@ -362,7 +362,7 @@ export default function CreateLeadModal({
 
       try {
         localStorage.removeItem(DRAFT_STORAGE_KEY);
-      } catch (e) {}
+      } catch (e) { }
 
       onSuccess(data.lead, data.duplicate_warning);
       onClose();
@@ -379,7 +379,7 @@ export default function CreateLeadModal({
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '24px' }}>
           <div>
-            <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Create New Pipeline Lead</h2>
+            <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Create New Lead</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
               {initialEnquiry ? `Converting from Enquiry ${initialEnquiry.enquiry_code}` : 'Register a qualified school/institution into the active pipeline'}
             </p>

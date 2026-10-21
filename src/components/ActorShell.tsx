@@ -12,6 +12,7 @@ export interface NavItem {
   href?: string;
   onClick?: () => void;
   isActive?: boolean;
+  section?: string;
 }
 
 export interface ActorShellProps {
@@ -236,7 +237,7 @@ export default function ActorShell({
             gap: '6px',
           }}
         >
-          {showLabels && (
+          {showLabels && !navItems.some((item) => Boolean(item.section)) && (
             <div
               style={{
                 fontSize: '0.68rem',
@@ -252,8 +253,39 @@ export default function ActorShell({
             </div>
           )}
 
-          {navItems.map((item) => {
+          {navItems.map((item, idx) => {
             const isActive = Boolean(item.isActive);
+            const prevItem = idx > 0 ? navItems[idx - 1] : null;
+            const isNewSection = item.section && (!prevItem || prevItem.section !== item.section);
+
+            const sectionNode = isNewSection ? (
+              showLabels ? (
+                <div
+                  key={`sec-${item.section}`}
+                  style={{
+                    fontSize: '0.66rem',
+                    fontWeight: 700,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    padding: idx === 0 ? '0 10px 6px' : '16px 10px 6px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item.section}
+                </div>
+              ) : idx > 0 ? (
+                <div
+                  key={`div-${idx}`}
+                  style={{
+                    height: '1px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    margin: '8px 4px',
+                  }}
+                />
+              ) : null
+            ) : null;
+
             const content = (
               <div
                 style={{
@@ -328,40 +360,39 @@ export default function ActorShell({
               textDecoration: 'none',
             };
 
-            if (item.href) {
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  onClick={() => {
-                    if (isMobile) setMobileDrawerOpen(false);
-                  }}
-                  title={!showLabels ? item.label : undefined}
-                  style={commonStyles}
-                >
-                  {content}
-                </Link>
-              );
-            }
-
             return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  item.onClick?.();
-                  if (isMobile) setMobileDrawerOpen(false);
-                }}
-                title={!showLabels ? item.label : undefined}
-                style={commonStyles}
-                onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                {content}
-              </button>
+              <React.Fragment key={item.id}>
+                {sectionNode}
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    onClick={() => {
+                      if (isMobile) setMobileDrawerOpen(false);
+                    }}
+                    title={!showLabels ? item.label : undefined}
+                    style={commonStyles}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => {
+                      item.onClick?.();
+                      if (isMobile) setMobileDrawerOpen(false);
+                    }}
+                    title={!showLabels ? item.label : undefined}
+                    style={commonStyles}
+                    onMouseEnter={(e) => {
+                      if (!isActive) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    {content}
+                  </button>
+                )}
+              </React.Fragment>
             );
           })}
         </nav>
