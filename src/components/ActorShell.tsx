@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -45,14 +45,27 @@ export default function ActorShell({
 
   // Sidebar expanded state with localStorage persistence (default true)
   const [isExpanded, setIsExpanded] = useState(true);
-  const [mounted, setMounted] = useState(false);
+
+  // My Account Profile Menu State
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setMounted(true);
     const saved = localStorage.getItem('schoolites_sidebar_expanded');
     if (saved !== null) {
       setIsExpanded(saved === 'true');
     }
+  }, []);
+
+  // Close profile menu on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const toggleSidebar = () => {
@@ -98,88 +111,58 @@ export default function ActorShell({
           boxShadow: '4px 0 24px rgba(0, 0, 0, 0.35)',
         }}
       >
-        {/* Brand & Toggle Header */}
+        {/* Brand Header (without role subtitle and without redundant collapse button) */}
         <div
           style={{
             height: '64px',
-            padding: isExpanded ? '0 16px 0 20px' : '0 12px',
+            padding: isExpanded ? '0 20px' : '0 12px',
             borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: isExpanded ? 'space-between' : 'center',
+            justifyContent: isExpanded ? 'flex-start' : 'center',
             gap: '12px',
             flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                minWidth: '36px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff',
-                fontWeight: 800,
-                fontSize: '17px',
-                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
-                flexShrink: 0,
-              }}
-            >
-              S
-            </div>
-            {isExpanded && (
-              <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                <h2 style={{ fontSize: '1.02rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#ffffff' }}>
-                  Schoolites
-                </h2>
-                <span
-                  style={{
-                    fontSize: '0.68rem',
-                    color: roleColor,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    display: 'block',
-                  }}
-                >
-                  {roleTitle}
-                </span>
-              </div>
-            )}
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              minWidth: '36px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              fontWeight: 800,
+              fontSize: '17px',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
+              flexShrink: 0,
+            }}
+          >
+            S
           </div>
-
           {isExpanded && (
-            <button
-              onClick={toggleSidebar}
-              title="Collapse Sidebar"
-              style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '6px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.8rem',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                e.currentTarget.style.color = '#ffffff';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                e.currentTarget.style.color = 'var(--text-muted)';
-              }}
-            >
-              ◀
-            </button>
+            <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+              <h2 style={{ fontSize: '1.02rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#ffffff', lineHeight: 1.2 }}>
+                Schoolites ERP
+              </h2>
+              <span
+                style={{
+                  fontSize: '0.68rem',
+                  color: roleColor,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  display: 'block',
+                  lineHeight: 1.3,
+                  marginTop: '2px',
+                }}
+              >
+                {roleTitle}
+              </span>
+            </div>
           )}
         </div>
 
@@ -187,7 +170,7 @@ export default function ActorShell({
         <nav
           style={{
             flex: 1,
-            padding: isExpanded ? '18px 12px' : '18px 8px',
+            padding: isExpanded ? '20px 12px' : '20px 8px',
             overflowY: 'auto',
             overflowX: 'hidden',
             display: 'flex',
@@ -203,7 +186,7 @@ export default function ActorShell({
                 color: 'var(--text-muted)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                padding: '0 10px 6px',
+                padding: '0 10px 8px',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -318,149 +301,6 @@ export default function ActorShell({
             );
           })}
         </nav>
-
-        {/* Sidebar Toggle at Bottom (when collapsed) */}
-        {!isExpanded && (
-          <div
-            style={{
-              padding: '12px 0',
-              display: 'flex',
-              justifyContent: 'center',
-              borderTop: '1px solid var(--border-subtle)',
-            }}
-          >
-            <button
-              onClick={toggleSidebar}
-              title="Expand Sidebar"
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                e.currentTarget.style.color = '#ffffff';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                e.currentTarget.style.color = 'var(--text-muted)';
-              }}
-            >
-              ▶
-            </button>
-          </div>
-        )}
-
-        {/* User Identity Footer */}
-        <div
-          style={{
-            padding: isExpanded ? '14px 16px' : '14px 8px',
-            borderTop: '1px solid var(--border-subtle)',
-            background: 'rgba(10, 15, 29, 0.8)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            flexShrink: 0,
-          }}
-        >
-          {isExpanded ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="user-code-pill" style={{ color: roleColor, fontSize: '0.74rem' }}>
-                    {user?.user_code || '---'}
-                  </span>
-                  <span className={`badge-role ${roleBadgeClass}`} style={{ fontSize: '0.68rem', padding: '2px 8px' }}>
-                    {roleTitle}
-                  </span>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  title="Sign Out"
-                  style={{
-                    color: 'var(--text-muted)',
-                    fontSize: '0.78rem',
-                    padding: '3px 6px',
-                    borderRadius: '4px',
-                    transition: 'color 0.2s',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                >
-                  Logout ⎋
-                </button>
-              </div>
-
-              <div style={{ overflow: 'hidden' }}>
-                <div
-                  style={{
-                    fontSize: '0.86rem',
-                    fontWeight: 700,
-                    color: 'var(--text-primary)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {user?.name || 'Authorized Rep'}
-                </div>
-                <div
-                  style={{
-                    fontSize: '0.74rem',
-                    color: 'var(--text-muted)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {user?.email || ''}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <div
-                title={`${user?.name} (${user?.user_code})`}
-                style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '50%',
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  border: `2px solid ${roleColor}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  color: '#ffffff',
-                }}
-              >
-                {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
-              </div>
-              <button
-                onClick={handleLogout}
-                title="Sign Out"
-                style={{
-                  fontSize: '0.85rem',
-                  color: 'var(--text-muted)',
-                  padding: '4px',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-              >
-                ⎋
-              </button>
-            </div>
-          )}
-        </div>
       </aside>
 
       {/* ========================================================
@@ -527,59 +367,183 @@ export default function ActorShell({
             </button>
 
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.98rem', fontWeight: 800, color: '#ffffff' }}>
-                  {roleTitle}
-                </span>
-                {activeTabTitle && (
-                  <>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>/</span>
-                    <span style={{ fontSize: '0.88rem', color: '#c7d2fe', fontWeight: 600 }}>
-                      {activeTabTitle}
-                    </span>
-                  </>
-                )}
-              </div>
+              <span style={{ fontSize: '1.02rem', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                {activeTabTitle || roleTitle}
+              </span>
             </div>
           </div>
 
-          {/* Right: Actor-specific Header Actions + Actor Pill & Logout */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {/* Dynamic Action Buttons (e.g. + Create Lead, Copy Referral Link) */}
+          {/* Right: Action Buttons + "My Account" Profile Menu */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            {/* Action Buttons (e.g. + Create Lead) */}
             {headerActions && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
                 {headerActions}
               </div>
             )}
 
-            <div style={{ width: '1px', height: '24px', background: 'var(--border-subtle)', margin: '0 2px' }} />
+            {/* MY ACCOUNT PROFILE DROPDOWN MENU */}
+            <div ref={profileMenuRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '9px',
+                  padding: '5px 14px 5px 6px',
+                  borderRadius: '24px',
+                  background: isProfileMenuOpen ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                  border: isProfileMenuOpen ? '1px solid rgba(99, 102, 241, 0.5)' : '1px solid var(--border-subtle)',
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  transition: 'all 0.18s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isProfileMenuOpen) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isProfileMenuOpen) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                }}
+              >
+                <div
+                  style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    color: '#ffffff',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>My Account</span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{isProfileMenuOpen ? '▲' : '▼'}</span>
+              </button>
 
-            {/* Actor Identity Badge */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className={`badge-role ${roleBadgeClass}`} style={{ fontSize: '0.74rem' }}>
-                {roleTitle}
-              </span>
-              <span className="user-code-pill" style={{ color: roleColor, fontSize: '0.76rem' }}>
-                {user?.user_code || '---'}
-              </span>
+              {/* FLOATING PROFILE POPOVER */}
+              {isProfileMenuOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    right: 0,
+                    width: '270px',
+                    background: 'rgba(15, 23, 42, 0.98)',
+                    backdropFilter: 'blur(24px)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+                    padding: '16px',
+                    zIndex: 1100,
+                    animation: 'fadeIn 0.15s ease',
+                  }}
+                >
+                  {/* User Profile Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                    <div
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.1rem',
+                        fontWeight: 700,
+                        color: '#ffffff',
+                        flexShrink: 0,
+                        boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
+                      }}
+                    >
+                      {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                    <div style={{ overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          fontSize: '0.92rem',
+                          fontWeight: 700,
+                          color: '#ffffff',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {user?.name || 'Authorized Rep'}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '0.76rem',
+                          color: 'var(--text-muted)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {user?.email || ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Role & ID Badges */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 10px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      borderRadius: '6px',
+                      marginBottom: '14px',
+                    }}
+                  >
+                    <span className={`badge-role ${roleBadgeClass}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+                      {roleTitle}
+                    </span>
+                    <span className="user-code-pill" style={{ color: roleColor, fontSize: '0.74rem' }}>
+                      {user?.user_code || '---'}
+                    </span>
+                  </div>
+
+                  <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '10px 0' }} />
+
+                  {/* Sign Out Button */}
+                  <button
+                    onClick={handleLogout}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: 'rgba(239, 68, 68, 0.08)',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      color: '#f87171',
+                      fontSize: '0.86rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                    }}
+                  >
+                    <span>Sign Out of Account</span>
+                    <span style={{ fontSize: '1rem' }}>⎋</span>
+                  </button>
+                </div>
+              )}
             </div>
-
-            {/* Logout Button */}
-            <button
-              onClick={handleLogout}
-              className="btn-secondary"
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.82rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-              title="Sign Out of Portal"
-            >
-              <span>Logout</span>
-              <span style={{ fontSize: '0.9rem' }}>⎋</span>
-            </button>
           </div>
         </header>
 
