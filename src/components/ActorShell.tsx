@@ -124,25 +124,20 @@ export default function ActorShell({
             flexShrink: 0,
           }}
         >
-          <div
+          <img
+            src="/schoolites-logo.png"
+            alt="Schoolites Logo"
             style={{
               width: '36px',
               height: '36px',
               minWidth: '36px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#ffffff',
-              fontWeight: 800,
-              fontSize: '17px',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
+              borderRadius: '50%',
+              objectFit: 'cover',
+              background: '#ffffff',
+              boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4)',
               flexShrink: 0,
             }}
-          >
-            S
-          </div>
+          />
           {isExpanded && (
             <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
               <h2 style={{ fontSize: '1.02rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#ffffff', lineHeight: 1.2 }}>

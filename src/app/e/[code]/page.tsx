@@ -314,6 +314,20 @@ function EnquiryContent() {
       >
         {/* Header with Representative Attribution */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{ display: 'inline-flex', justifyContent: 'center', marginBottom: '16px' }}>
+            <img
+              src="/schoolites-logo.png"
+              alt="Schoolites Logo"
+              style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                background: '#ffffff',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+              }}
+            />
+          </div>
           <div
             style={{
               display: 'inline-flex',

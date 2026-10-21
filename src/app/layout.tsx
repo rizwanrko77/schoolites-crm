@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Schoolites Portal",
   description: "Unified CRM & Pipeline Platform for Education Outreach",
+  icons: {
+    icon: "/schoolites-logo.png",
+    shortcut: "/schoolites-logo.png",
+    apple: "/schoolites-logo.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

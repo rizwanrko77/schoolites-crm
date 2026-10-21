@@ -271,27 +271,16 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
       navItems={navItems}
       activeTabTitle={activeTabTitles[activeTab]}
       headerActions={
-        <>
-          <button
-            onClick={() => copyToClipboard(publicLink, 'your unique referral link')}
-            className="btn-secondary"
-            style={{ padding: '7px 14px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
-            title="Copy your unique public referral link"
-          >
-            <span>🔗</span>
-            <span>Copy Link</span>
-          </button>
-          <button
-            onClick={() => {
-              setEnquiryToConvert(null);
-              setIsLeadModalOpen(true);
-            }}
-            className="btn-primary"
-            style={{ padding: '7px 16px', fontSize: '0.84rem' }}
-          >
-            + Create Lead
-          </button>
-        </>
+        <button
+          onClick={() => {
+            setEnquiryToConvert(null);
+            setIsLeadModalOpen(true);
+          }}
+          className="btn-primary"
+          style={{ padding: '8px 16px', fontSize: '0.86rem' }}
+        >
+          + Create Lead
+        </button>
       }
     >
       <div style={{ minHeight: '100%', padding: '28px 36px', maxWidth: '1360px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>

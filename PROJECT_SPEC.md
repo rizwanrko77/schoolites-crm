@@ -104,7 +104,8 @@ graph TD
 | **Card Layout Polish** | 2-line instruction clamp with inline toggle (`Show full instructions ▼ / Show less ▲`) + auto-adjustable body pitch text box (`flex: 1` consuming empty voids on text cards) | ✅ Complete |
 | **Interactive Asset Image Manager** | Edit modal shows active thumbnails with individual `✕` removal, remaining slot counter, and targeted Neon S3 deletion of removed objects | ✅ Complete |
 | **Lead Form Enhancements** | Searchable country select (defaults India, strictly excludes Pakistan), student strength bracket dropdown (`Below 500` to `4000+`), hybrid expected start date selector, and preferred mode options | ✅ Complete |
-| **ActorShell Architecture** | Unified sticky header and expandable/collapsible sidebar (260px expanded / 72px icon rail with toggle) tailored per actor (Admin, Pre-Sales, Referral, Business Relations) with instant tab-switching and persistent state | ✅ Complete |
+| **ActorShell Architecture** | Unified sticky header and expandable/collapsible sidebar (260px expanded / 72px icon rail with toggle) tailored per actor (Admin, Pre-Sales, Referral, Business Relations) with instant tab-switching, My Account profile dropdown menu, and persistent state | ✅ Complete |
+| **Brand Identity & Favicon** | Integrated official Schoolites circular logo (geometric origami motif + cursive script) across favicon (`/favicon.ico`, `/icon.png`), sidebar brand header (`Schoolites ERP`), login portal, root redirect, and public enquiry page | ✅ Complete |
 | **Version Control Sync** | Connected to GitHub (`https://github.com/rizwanrko77/schoolites-crm.git`) on `main` branch with strictly ignored `.env.local` | ✅ Complete |
 | **Phase 5** | Google Places API (New) integration with strict field masking, staging deduplication, and batch lead release | ⏳ Ready to build |
 | **Phase 6** | Deal settlement & bank UTR reference tracking in `/admin/incentives` | ⏳ Ready to build |

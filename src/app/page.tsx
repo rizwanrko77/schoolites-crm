@@ -48,10 +48,23 @@ export default function HomePage() {
       }}
     >
       <div style={{ textAlign: 'center' }}>
+        <img
+          src="/schoolites-logo.png"
+          alt="Schoolites Logo"
+          style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            objectFit: 'cover',
+            background: '#ffffff',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+            marginBottom: '16px',
+          }}
+        />
         <div
           style={{
-            width: '36px',
-            height: '36px',
+            width: '28px',
+            height: '28px',
             border: '3px solid rgba(99, 102, 241, 0.2)',
             borderTopColor: '#6366f1',
             borderRadius: '50%',
@@ -59,7 +72,7 @@ export default function HomePage() {
             margin: '0 auto 12px',
           }}
         />
-        Loading Schoolites Portal...
+        Loading Schoolites ERP...
       </div>
     </div>
   );

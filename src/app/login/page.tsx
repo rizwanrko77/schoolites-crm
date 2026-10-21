@@ -190,23 +190,19 @@ export default function LoginPage() {
       >
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '56px',
-              height: '56px',
-              borderRadius: '16px',
-              background: 'linear-gradient(135deg, #4f46e5 0%, #9333ea 100%)',
-              color: '#ffffff',
-              fontSize: '24px',
-              fontWeight: 800,
-              boxShadow: '0 8px 24px rgba(79, 70, 229, 0.45)',
-              marginBottom: '16px',
-            }}
-          >
-            S
+          <div style={{ display: 'inline-flex', justifyContent: 'center', marginBottom: '16px' }}>
+            <img
+              src="/schoolites-logo.png"
+              alt="Schoolites Logo"
+              style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                background: '#ffffff',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+              }}
+            />
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', marginBottom: '6px' }}>
             Schoolites Portal
