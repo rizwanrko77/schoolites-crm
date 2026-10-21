@@ -79,6 +79,7 @@ export default function CreateLeadModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [showAdditionalContact, setShowAdditionalContact] = useState(false);
 
   // Expected Start Date Hybrid State
   const [startPreset, setStartPreset] = useState('Within 1 Month');
@@ -130,6 +131,8 @@ export default function CreateLeadModal({
         spoc_email: initialEnquiry.email || '',
         additional_details: initialEnquiry.message ? `Requirements from Enquiry: ${initialEnquiry.message}` : '',
       }));
+    } else {
+      setShowAdditionalContact(false);
     }
   }, [initialEnquiry]);
 
@@ -393,7 +396,7 @@ export default function CreateLeadModal({
                 >
                   <option value="yes">YES (Active System)</option>
                   <option value="no">NO (None)</option>
-                  <option value="unsure">Unsure / Mixed</option>
+                  <option value="unsure">Unsure</option>
                 </select>
               </div>
 
@@ -417,7 +420,7 @@ export default function CreateLeadModal({
           {/* Section 2: SPOC & Decision Maker */}
           <div>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#c7d2fe', marginBottom: '12px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
-              2. Contact Persons (SPOC & Decision Maker)
+              2. Contact Persons (SPOC, Decision Maker & Additional Contacts)
             </h3>
 
             {/* SPOC */}
@@ -442,7 +445,7 @@ export default function CreateLeadModal({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Principal / Coordinator"
+                  placeholder="e.g. Principal, Director, Admin Head"
                   value={formData.spoc_role}
                   onChange={(e) => setFormData({ ...formData, spoc_role: e.target.value })}
                   className="input-field"
@@ -526,7 +529,7 @@ export default function CreateLeadModal({
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Managing Trustee"
+                    placeholder="e.g. Managing Trustee, Chairperson, Director"
                     value={formData.dm_role}
                     onChange={(e) => setFormData({ ...formData, dm_role: e.target.value })}
                     className="input-field"
@@ -563,6 +566,142 @@ export default function CreateLeadModal({
                 </div>
               </div>
             )}
+
+            {/* Optional Additional Contact Person */}
+            <div style={{ marginTop: '14px' }}>
+              {!showAdditionalContact ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAdditionalContact(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    border: '1px dashed rgba(99, 102, 241, 0.35)',
+                    color: '#818cf8',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.35)';
+                  }}
+                >
+                  <span style={{ fontSize: '1.05rem', lineHeight: 1 }}>+</span>
+                  <span>Add Additional Contact Details</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    (Optional — IT Coordinator, Vice Principal, Admin, etc.)
+                  </span>
+                </button>
+              ) : (
+                <div
+                  style={{
+                    padding: '16px',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    animation: 'fadeIn 0.2s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.95rem' }}>👤</span>
+                      <span style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        Additional Contact Person (Optional)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAdditionalContact(false);
+                        setFormData((prev: any) => ({
+                          ...prev,
+                          additional_contact_name: '',
+                          additional_contact_role: '',
+                          additional_contact_phone: '',
+                          additional_contact_email: '',
+                        }));
+                      }}
+                      style={{
+                        fontSize: '0.78rem',
+                        color: '#f87171',
+                        cursor: 'pointer',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                      }}
+                    >
+                      ✕ Remove
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                        Contact Person Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Mr. Ramesh Sharma"
+                        value={formData.additional_contact_name}
+                        onChange={(e) => setFormData({ ...formData, additional_contact_name: e.target.value })}
+                        className="input-field"
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                        Designation / Role
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. IT Coordinator / Vice Principal"
+                        value={formData.additional_contact_role}
+                        onChange={(e) => setFormData({ ...formData, additional_contact_role: e.target.value })}
+                        className="input-field"
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                        Mobile / WhatsApp
+                      </label>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        placeholder="Direct contact number"
+                        value={formData.additional_contact_phone}
+                        onChange={(e) => setFormData({ ...formData, additional_contact_phone: e.target.value.replace(/[^0-9]/g, '') })}
+                        className="input-field"
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="contact@institution.edu"
+                        value={formData.additional_contact_email}
+                        onChange={(e) => setFormData({ ...formData, additional_contact_email: e.target.value })}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Section 3: Decision Flow & Preferred Connect Slot */}
@@ -665,7 +804,7 @@ export default function CreateLeadModal({
 
             <div>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                Additional Notes
+                Additional Details
               </label>
               <textarea
                 rows={2}

@@ -359,6 +359,22 @@ export default function LeadDetailModal({
                       <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>📞 {lead?.dm_phone}</p>
                       {lead?.dm_email && <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>✉️ {lead?.dm_email}</p>}
                     </div>
+
+                    {/* Additional Contact if present */}
+                    {(lead?.additional_contact_name || lead?.additional_contact_phone) && (
+                      <div className="glass-panel" style={{ padding: '16px', borderLeft: '3px solid #c084fc' }}>
+                        <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c084fc', marginBottom: '8px' }}>
+                          Additional Contact
+                        </h4>
+                        <p><strong>{lead.additional_contact_name || 'Contact Person'}</strong> {lead.additional_contact_role ? `(${lead.additional_contact_role})` : ''}</p>
+                        {lead.additional_contact_phone && (
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>📞 {lead.additional_contact_phone}</p>
+                        )}
+                        {lead.additional_contact_email && (
+                          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>✉️ {lead.additional_contact_email}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* ERP & Size */}
