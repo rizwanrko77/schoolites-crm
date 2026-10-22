@@ -224,6 +224,10 @@ graph TD
    * Batch release mechanism (10 or 25 leads per batch) allocated to Pre-Sales and Partners.
 4. **Phase 6: Commission & Incentive Settlements:**
    * `/admin/incentives` clearance modal recording bank UTR / NEFT reference numbers, payout timestamps, and auto-updating partner commission statuses to `cleared`.
+5. **Planned Lead Source Architecture (To be implemented after core flows are finalized):**
+   * Keep `Lead Owner` (Person/Actor who gets credit/commission) and `Lead Source` (Channel/Origin) strictly separate.
+   * Preset options: `Database (Google Places Discovery)`, `Inbound Enquiry`, `Meta Ads`, `Website`, `WhatsApp Campaign`, `Direct Enquiry`, `Other (Custom)`.
+   * Smart auto-fill for Enquiry conversions and Google Places staging imports.
 
 
 
