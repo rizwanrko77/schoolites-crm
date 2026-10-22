@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { formatSlotDate, formatSlotTime } from '@/lib/slotFormat';
 
 interface Note {
   id: string;
@@ -420,7 +421,7 @@ export default function LeadDetailModal({
                         📅 Preferred Connect Slot:
                       </span>
                       <span style={{ fontSize: '0.9rem' }}>
-                        {lead.preferred_slot_date ? new Date(lead.preferred_slot_date).toLocaleDateString('en-IN') : ''} at {lead.preferred_slot_time || 'Anytime'} ({lead.preferred_slot_mode})
+                        {[formatSlotDate(lead.preferred_slot_date), formatSlotTime(lead.preferred_slot_time)].filter(Boolean).join(' at ') || 'Flexible timing'} ({lead.preferred_slot_mode || 'Phone/WhatsApp Call'})
                       </span>
                     </div>
                   )}

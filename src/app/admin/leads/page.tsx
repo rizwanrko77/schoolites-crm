@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import LeadDetailModal from '@/components/LeadDetailModal';
 import CreateLeadModal from '@/components/CreateLeadModal';
+import { formatSlotDate, formatSlotTime, getSlotModeIcon } from '@/lib/slotFormat';
 
 interface Lead {
   id: string;
@@ -24,6 +25,9 @@ interface Lead {
   owner_role: string;
   manager_name: string | null;
   manager_code: string | null;
+  preferred_slot_date?: string | null;
+  preferred_slot_time?: string | null;
+  preferred_slot_mode?: string | null;
   created_at: string;
 }
 
@@ -229,7 +233,7 @@ export default function AdminLeadsPage() {
                   Institution & City
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  SPOC Contact
+                  Preferred Connect Slot
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                   Stage Status
@@ -286,8 +290,19 @@ export default function AdminLeadsPage() {
                     </td>
 
                     <td style={{ padding: '16px 20px' }}>
-                      <div style={{ fontWeight: 600 }}>{lead.spoc_name}</div>
-                      <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>📞 {lead.spoc_phone}</div>
+                      {lead.preferred_slot_date || lead.preferred_slot_time || lead.preferred_slot_mode ? (
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.84rem' }}>
+                            {[formatSlotDate(lead.preferred_slot_date), formatSlotTime(lead.preferred_slot_time)].filter(Boolean).join(' • ') || 'Flexible Timing'}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span>{getSlotModeIcon(lead.preferred_slot_mode)}</span>
+                            <span>{lead.preferred_slot_mode || 'Phone/WhatsApp Call'}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>— Not specified</span>
+                      )}
                     </td>
 
                     <td style={{ padding: '16px 20px' }}>

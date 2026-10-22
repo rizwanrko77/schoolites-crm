@@ -113,6 +113,8 @@ graph TD
 | **Lead Terminology Alignment** | Enforced platform-wide canonical terminology: `Lead Owner` (creator across any team) and `Lead Manager` (assigned representative in Business Relations) across tables, modals, cards, and reassign flows | ✅ Complete |
 | **Lead View Completeness & UI Simplification** | 100% field parity between Create & View forms (rendered missing `additional_details` notes & converted source enquiry badge), removed unneeded `deal_value` from pipeline tables and modals, and standardized `STAGE STATUS` & `Action` column headers across all actors | ✅ Complete |
 | **Audit Timeline Enhancements** | Reverse chronological ordering (`ORDER BY created_at DESC`), two-line Date (`DD MMM YYYY`) and Time (`hh:mm a`) timestamp display, and human-readable event descriptions (stage changes, claims, creator registration) | ✅ Complete |
+| **Pipeline Connect Slot Alignment** | Replaced `SPOC Contact` with `Preferred Connect Slot` on leads pipeline tables across Admin, Business Relations, Pre-Sales, and Referral Partners (with clean date/time and mode formatting) | ✅ Complete |
+| **Full-Width Workspace Canvas** | Removed `max-width: 1400px` centering clamp from `.workspace-container`, allowing dashboards and data tables to expand across the full screen width seamlessly | ✅ Complete |
 | **Version Control Sync** | Connected to GitHub (`https://github.com/rizwanrko77/schoolites-crm.git`) on `main` branch with strictly ignored `.env.local` | ✅ Complete |
 | **Phase 5** | Google Places API (New) integration with strict field masking, staging deduplication, and batch lead release | ⏳ Ready to build |
 | **Phase 6** | Deal settlement & bank UTR reference tracking in `/admin/incentives` | ⏳ Ready to build |
@@ -124,7 +126,7 @@ graph TD
 ### Viewport & Containers:
 * **Viewport Config:** Explicitly exported in [`src/app/layout.tsx`](file:///c:/Users/91725/schoolites/src/app/layout.tsx) with `width: device-width, initialScale: 1, maximumScale: 5`.
 * **Universal Workspace Container (`.workspace-container`):** Replaced hardcoded paddings (`32px 40px` / `28px 36px`) across Admin, Pre-Sales, Referral, and Business Relations with responsive padding:
-  * Desktop (`> 768px`): `padding: 28px 36px; max-width: 1400px;`
+  * Desktop (`> 768px`): `padding: 28px 36px; width: 100%;` (full width responsive canvas)
   * Tablet/Mobile (`<= 768px`): `padding: 16px 12px; gap: 16px;`
   * Small Phone (`<= 480px`): `padding: 12px 8px; gap: 14px;`
 

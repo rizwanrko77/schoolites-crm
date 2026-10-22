@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import CreateLeadModal from '@/components/CreateLeadModal';
 import LeadDetailModal from '@/components/LeadDetailModal';
 import ActorShell, { NavItem } from '@/components/ActorShell';
+import { formatSlotDate, formatSlotTime, getSlotModeIcon } from '@/lib/slotFormat';
 
 interface Enquiry {
   id: string;
@@ -515,10 +516,13 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                     Institution
                   </th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Lead Manager
+                    Preferred Connect Slot
                   </th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                     Stage Status
+                  </th>
+                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                    Lead Manager
                   </th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
                     Action
@@ -528,7 +532,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
               <tbody>
                 {myLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
                       You haven't generated any leads yet. Convert an enquiry or click "+ Create Lead" to start!
                     </td>
                   </tr>
@@ -545,13 +549,18 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                       </td>
 
                       <td style={{ padding: '16px 20px' }}>
-                        {lead.manager_name ? (
+                        {lead.preferred_slot_date || lead.preferred_slot_time || lead.preferred_slot_mode ? (
                           <div>
-                            <strong>{lead.manager_name}</strong>
-                            <span className="user-code-pill" style={{ marginLeft: '6px', fontSize: '0.75rem' }}>{lead.manager_code}</span>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.84rem' }}>
+                              {[formatSlotDate(lead.preferred_slot_date), formatSlotTime(lead.preferred_slot_time)].filter(Boolean).join(' • ') || 'Flexible Timing'}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span>{getSlotModeIcon(lead.preferred_slot_mode)}</span>
+                              <span>{lead.preferred_slot_mode || 'Phone/WhatsApp Call'}</span>
+                            </div>
                           </div>
                         ) : (
-                          <span style={{ color: '#f59e0b', fontSize: '0.82rem', fontWeight: 600 }}>In Unassigned Pool</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>— Not specified</span>
                         )}
                       </td>
 
@@ -570,6 +579,17 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                         >
                           ● {lead.status.replace('_', ' ')}
                         </span>
+                      </td>
+
+                      <td style={{ padding: '16px 20px' }}>
+                        {lead.manager_name ? (
+                          <div>
+                            <strong>{lead.manager_name}</strong>
+                            <span className="user-code-pill" style={{ marginLeft: '6px', fontSize: '0.75rem' }}>{lead.manager_code}</span>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#f59e0b', fontSize: '0.82rem', fontWeight: 600 }}>In Unassigned Pool</span>
+                        )}
                       </td>
 
                       <td style={{ padding: '16px 20px', textAlign: 'right' }}>
