@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import CreateLeadModal from '@/components/CreateLeadModal';
 import LeadDetailModal from '@/components/LeadDetailModal';
+import LeadTableControls from '@/components/LeadTableControls';
 import ActorShell, { NavItem } from '@/components/ActorShell';
 import { formatSlotDate, formatSlotTime, getSlotModeIcon } from '@/lib/slotFormat';
+import { LEAD_STATUSES, getStatusMeta } from '@/lib/leadStatuses';
 
 interface Lead {
   id: string;
@@ -76,8 +78,39 @@ export default function BusinessRelationsPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('unassigned');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  
+  // Search, Status Filter & Sorting State with sessionStorage persistence
+  const [search, setSearch] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('br_leads_search');
+        if (saved) return saved;
+      } catch {}
+    }
+    return '';
+  });
+
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('br_leads_statuses');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
+
+  const [sortBy, setSortBy] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('br_leads_sort');
+        if (saved) return saved;
+      } catch {}
+    }
+    return 'created_desc';
+  });
+
+  const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
   const [toastMsg, setToastMsg] = useState('');
 
   // Leads Data
@@ -105,6 +138,17 @@ export default function BusinessRelationsPage() {
   // Concurrency-safe Grabbing state
   const [grabbingLeadId, setGrabbingLeadId] = useState<string | null>(null);
 
+  // Persist filter preferences
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('br_leads_search', search);
+        sessionStorage.setItem('br_leads_statuses', JSON.stringify(selectedStatuses));
+        sessionStorage.setItem('br_leads_sort', sortBy);
+      } catch {}
+    }
+  }, [search, selectedStatuses, sortBy]);
+
   // 1. Fetch Leads
   const fetchLeads = async () => {
     try {
@@ -114,7 +158,8 @@ export default function BusinessRelationsPage() {
       const params = new URLSearchParams();
       const viewParam = isLeadTab ? activeTab : 'my';
       params.append('view', viewParam);
-      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (selectedStatuses.length > 0) params.append('statuses', selectedStatuses.join(','));
+      params.append('sort_by', sortBy);
       if (search.trim()) params.append('search', search.trim());
 
       const res = await fetch(`/api/leads?${params.toString()}`);
@@ -127,6 +172,43 @@ export default function BusinessRelationsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Column Header Sorting
+  const sortedLeads = useMemo(() => {
+    if (!columnSort) return leads;
+    const sorted = [...leads];
+    const { column, direction } = columnSort;
+    const modifier = direction === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      if (column === 'lead_code') return a.lead_code.localeCompare(b.lead_code) * modifier;
+      if (column === 'institute') return a.institute_name.localeCompare(b.institute_name) * modifier;
+      if (column === 'slot') return (a.preferred_slot_date || '').localeCompare(b.preferred_slot_date || '') * modifier;
+      if (column === 'status') return (a.status || '').localeCompare(b.status || '') * modifier;
+      if (column === 'manager') return (a.manager_name || 'Unassigned').localeCompare(b.manager_name || 'Unassigned') * modifier;
+      return 0;
+    });
+    return sorted;
+  }, [leads, columnSort]);
+
+  const handleToggleColumnSort = (col: string) => {
+    if (columnSort?.column === col) {
+      if (columnSort.direction === 'asc') {
+        setColumnSort({ column: col, direction: 'desc' });
+      } else {
+        setColumnSort(null);
+      }
+    } else {
+      setColumnSort({ column: col, direction: 'asc' });
+    }
+  };
+
+  const handleClearAll = () => {
+    setSearch('');
+    setSelectedStatuses([]);
+    setSortBy('created_desc');
+    setColumnSort(null);
   };
 
   // 2. Fetch Enquiries
@@ -189,7 +271,7 @@ export default function BusinessRelationsPage() {
     }
   }, [user]);
 
-  // Refetch leads when tab, filter, or search changes
+  // Refetch leads when tab, filter, sort, or search changes
   useEffect(() => {
     if (['unassigned', 'my', 'all', 'created_by_me'].includes(activeTab)) {
       const timer = setTimeout(() => {
@@ -197,7 +279,7 @@ export default function BusinessRelationsPage() {
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [activeTab, statusFilter, search]);
+  }, [activeTab, selectedStatuses, sortBy, search]);
 
   const handleGrabLead = async (leadId: string, leadCode: string) => {
     setGrabbingLeadId(leadId);
@@ -317,7 +399,7 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'unassigned',
       onClick: () => {
         setActiveTab('unassigned');
-        setStatusFilter('all');
+        setSelectedStatuses([]);
       },
     },
     {
@@ -329,7 +411,7 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'my',
       onClick: () => {
         setActiveTab('my');
-        setStatusFilter('all');
+        setSelectedStatuses([]);
       },
     },
     {
@@ -340,7 +422,7 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'all',
       onClick: () => {
         setActiveTab('all');
-        setStatusFilter('all');
+        setSelectedStatuses([]);
       },
     },
 
@@ -354,7 +436,7 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'created_by_me',
       onClick: () => {
         setActiveTab('created_by_me');
-        setStatusFilter('all');
+        setSelectedStatuses([]);
       },
     },
     {
@@ -456,48 +538,21 @@ export default function BusinessRelationsPage() {
                 </p>
               </div>
 
-              {/* Search */}
-              <div style={{ width: '100%', maxWidth: '320px' }}>
-                <input
-                  type="text"
-                  placeholder="Search leads, SPOC, phone..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="input-field"
-                  style={{ padding: '8px 14px', fontSize: '0.85rem' }}
-                />
-              </div>
             </div>
 
-            {/* Stage Sub-filters if in My Leads, All Leads, or My Generated */}
-            {activeTab !== 'unassigned' && (
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {[
-                  { id: 'all', label: 'All Stages' },
-                  { id: 'assigned', label: 'Assigned' },
-                  { id: 'in_discussion', label: 'In Discussion' },
-                  { id: 'proposal_sent', label: 'Proposal Sent' },
-                  { id: 'won', label: 'Won 🏆' },
-                  { id: 'lost', label: 'Lost' },
-                ].map((st) => (
-                  <button
-                    key={st.id}
-                    onClick={() => setStatusFilter(st.id)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      background: statusFilter === st.id ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                      color: statusFilter === st.id ? '#ffffff' : 'var(--text-secondary)',
-                      border: statusFilter === st.id ? '1px solid #818cf8' : '1px solid transparent',
-                    }}
-                  >
-                    {st.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Reusable Lead Table Controls (Search, Status Checkboxes, Sort Dropdown, Clear All) */}
+            <LeadTableControls
+              search={search}
+              onSearchChange={setSearch}
+              selectedStatuses={selectedStatuses}
+              onStatusesChange={setSelectedStatuses}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+              onClearAll={handleClearAll}
+              placeholder="Search by code, institute, city, SPOC, phone, email, manager..."
+              totalCount={leads.length}
+              filteredCount={sortedLeads.length}
+            />
 
             {/* Leads Table */}
             <div className="glass-panel" style={{ overflow: 'hidden' }}>
@@ -505,20 +560,80 @@ export default function BusinessRelationsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Lead Code & Owner
+                      <th
+                        onClick={() => handleToggleColumnSort('lead_code')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: columnSort?.column === 'lead_code' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Lead Code"
+                      >
+                        Lead Code & Owner {columnSort?.column === 'lead_code' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                       </th>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Institution & City
+                      <th
+                        onClick={() => handleToggleColumnSort('institute')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: columnSort?.column === 'institute' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Institution Name"
+                      >
+                        Institution & City {columnSort?.column === 'institute' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                       </th>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Preferred Connect Slot
+                      <th
+                        onClick={() => handleToggleColumnSort('slot')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: columnSort?.column === 'slot' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Preferred Connect Slot"
+                      >
+                        Preferred Connect Slot {columnSort?.column === 'slot' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                       </th>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Stage Status
+                      <th
+                        onClick={() => handleToggleColumnSort('status')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: columnSort?.column === 'status' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Stage Status"
+                      >
+                        Stage Status {columnSort?.column === 'status' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                       </th>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Lead Manager
+                      <th
+                        onClick={() => handleToggleColumnSort('manager')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: columnSort?.column === 'manager' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Lead Manager"
+                      >
+                        Lead Manager {columnSort?.column === 'manager' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                       </th>
                       <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
                         Action
@@ -532,7 +647,7 @@ export default function BusinessRelationsPage() {
                           Loading pipeline...
                         </td>
                       </tr>
-                    ) : leads.length === 0 ? (
+                    ) : sortedLeads.length === 0 ? (
                       <tr>
                         <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
                           {activeTab === 'unassigned'
@@ -543,7 +658,7 @@ export default function BusinessRelationsPage() {
                         </td>
                       </tr>
                     ) : (
-                      leads.map((lead) => (
+                      sortedLeads.map((lead) => (
                         <tr
                           key={lead.id}
                           style={{ borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.15s ease' }}
@@ -588,20 +703,25 @@ export default function BusinessRelationsPage() {
                           </td>
 
                           <td style={{ padding: '16px 20px' }}>
-                            <span
-                              style={{
-                                padding: '4px 10px',
-                                borderRadius: '9999px',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                textTransform: 'uppercase',
-                                color: statusColorMap[lead.status] || '#ffffff',
-                                background: `${statusColorMap[lead.status] || '#ffffff'}1a`,
-                                border: `1px solid ${statusColorMap[lead.status] || '#ffffff'}40`,
-                              }}
-                            >
-                              ● {lead.status.replace('_', ' ')}
-                            </span>
+                            {(() => {
+                              const meta = getStatusMeta(lead.status);
+                              return (
+                                <span
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    color: meta.color,
+                                    background: meta.bgColor,
+                                    border: `1px solid ${meta.borderColor}`,
+                                  }}
+                                >
+                                  ● {meta.label}
+                                </span>
+                              );
+                            })()}
                           </td>
 
                           <td style={{ padding: '16px 20px' }}>

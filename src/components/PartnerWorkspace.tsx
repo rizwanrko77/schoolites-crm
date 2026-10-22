@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import CreateLeadModal from '@/components/CreateLeadModal';
 import LeadDetailModal from '@/components/LeadDetailModal';
+import LeadTableControls from '@/components/LeadTableControls';
 import ActorShell, { NavItem } from '@/components/ActorShell';
 import { formatSlotDate, formatSlotTime, getSlotModeIcon } from '@/lib/slotFormat';
+import { LEAD_STATUSES, getStatusMeta } from '@/lib/leadStatuses';
 
 interface Enquiry {
   id: string;
@@ -59,12 +61,42 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
   const [loading, setLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState('');
 
+  // Leads Filter & Sort State with sessionStorage persistence
+  const [leadSearch, setLeadSearch] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return sessionStorage.getItem('partner_leads_search') || '';
+      } catch {}
+    }
+    return '';
+  });
+
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('partner_leads_statuses');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
+
+  const [sortBy, setSortBy] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return sessionStorage.getItem('partner_leads_sort') || 'created_desc';
+      } catch {}
+    }
+    return 'created_desc';
+  });
+
+  const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
+
   // Asset Carousel & Lightbox States
   const [cardImageIndices, setCardImageIndices] = useState<Record<string, number>>({});
   const [lightboxData, setLightboxData] = useState<{ asset: Asset; index: number } | null>(null);
   const [downloadPromptAsset, setDownloadPromptAsset] = useState<Asset | null>(null);
   const [expandedInstructions, setExpandedInstructions] = useState<Record<string, boolean>>({});
-
 
   // Modals
   const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null);
@@ -72,6 +104,16 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
+  // Persist filter preferences
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('partner_leads_search', leadSearch);
+        sessionStorage.setItem('partner_leads_statuses', JSON.stringify(selectedStatuses));
+        sessionStorage.setItem('partner_leads_sort', sortBy);
+      } catch {}
+    }
+  }, [leadSearch, selectedStatuses, sortBy]);
 
   const fetchEnquiries = async () => {
     try {
@@ -87,7 +129,13 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
 
   const fetchMyLeads = async () => {
     try {
-      const res = await fetch('/api/leads?view=created_by_me');
+      const params = new URLSearchParams();
+      params.append('view', 'created_by_me');
+      if (leadSearch.trim()) params.append('search', leadSearch.trim());
+      if (selectedStatuses.length > 0) params.append('statuses', selectedStatuses.join(','));
+      params.append('sort_by', sortBy);
+
+      const res = await fetch(`/api/leads?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setMyLeads(data.leads || []);
@@ -95,6 +143,53 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // Refetch leads when tab or search/filter changes
+  useEffect(() => {
+    if (activeTab === 'leads') {
+      const timer = setTimeout(() => {
+        fetchMyLeads();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, leadSearch, selectedStatuses, sortBy]);
+
+  // Column Header Sorting
+  const sortedMyLeads = useMemo(() => {
+    if (!columnSort) return myLeads;
+    const sorted = [...myLeads];
+    const { column, direction } = columnSort;
+    const modifier = direction === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      if (column === 'lead_code') return a.lead_code.localeCompare(b.lead_code) * modifier;
+      if (column === 'institute') return a.institute_name.localeCompare(b.institute_name) * modifier;
+      if (column === 'slot') return (a.preferred_slot_date || '').localeCompare(b.preferred_slot_date || '') * modifier;
+      if (column === 'status') return (a.status || '').localeCompare(b.status || '') * modifier;
+      if (column === 'manager') return (a.manager_name || 'Unassigned').localeCompare(b.manager_name || 'Unassigned') * modifier;
+      return 0;
+    });
+    return sorted;
+  }, [myLeads, columnSort]);
+
+  const handleToggleColumnSort = (col: string) => {
+    if (columnSort?.column === col) {
+      if (columnSort.direction === 'asc') {
+        setColumnSort({ column: col, direction: 'desc' });
+      } else {
+        setColumnSort(null);
+      }
+    } else {
+      setColumnSort({ column: col, direction: 'asc' });
+    }
+  };
+
+  const handleClearAll = () => {
+    setLeadSearch('');
+    setSelectedStatuses([]);
+    setSortBy('created_desc');
+    setColumnSort(null);
   };
 
   const fetchAssets = async () => {
@@ -497,89 +592,169 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
 
       {/* TAB 2: MY CREATED LEADS */}
       {activeTab === 'leads' && (
-        <div className="glass-panel" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>My Pipeline Leads Tracker</h2>
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Total Created: <strong>{myLeads.length}</strong>
-            </span>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Lead Table Controls */}
+          <LeadTableControls
+            search={leadSearch}
+            onSearchChange={setLeadSearch}
+            selectedStatuses={selectedStatuses}
+            onStatusesChange={setSelectedStatuses}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onClearAll={handleClearAll}
+            placeholder="Search by code, institute, city, SPOC, phone, email, manager..."
+            totalCount={myLeads.length}
+            filteredCount={sortedMyLeads.length}
+          />
 
-          <div className="table-responsive">
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Lead Code
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Institution
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Preferred Connect Slot
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Stage Status
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Lead Manager
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {myLeads.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      You haven't generated any leads yet. Convert an enquiry or click "+ Create Lead" to start!
-                    </td>
+          <div className="glass-panel" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>My Pipeline Leads Tracker</h2>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Total Created: <strong>{myLeads.length}</strong>
+              </span>
+            </div>
+
+            <div className="table-responsive">
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                    <th
+                      onClick={() => handleToggleColumnSort('lead_code')}
+                      style={{
+                        padding: '14px 20px',
+                        fontWeight: 600,
+                        color: columnSort?.column === 'lead_code' ? '#818cf8' : 'var(--text-muted)',
+                        fontSize: '0.78rem',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      title="Click to sort by Lead Code"
+                    >
+                      Lead Code {columnSort?.column === 'lead_code' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                    </th>
+                    <th
+                      onClick={() => handleToggleColumnSort('institute')}
+                      style={{
+                        padding: '14px 20px',
+                        fontWeight: 600,
+                        color: columnSort?.column === 'institute' ? '#818cf8' : 'var(--text-muted)',
+                        fontSize: '0.78rem',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      title="Click to sort by Institution Name"
+                    >
+                      Institution {columnSort?.column === 'institute' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                    </th>
+                    <th
+                      onClick={() => handleToggleColumnSort('slot')}
+                      style={{
+                        padding: '14px 20px',
+                        fontWeight: 600,
+                        color: columnSort?.column === 'slot' ? '#818cf8' : 'var(--text-muted)',
+                        fontSize: '0.78rem',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      title="Click to sort by Preferred Connect Slot"
+                    >
+                      Preferred Connect Slot {columnSort?.column === 'slot' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                    </th>
+                    <th
+                      onClick={() => handleToggleColumnSort('status')}
+                      style={{
+                        padding: '14px 20px',
+                        fontWeight: 600,
+                        color: columnSort?.column === 'status' ? '#818cf8' : 'var(--text-muted)',
+                        fontSize: '0.78rem',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      title="Click to sort by Stage Status"
+                    >
+                      Stage Status {columnSort?.column === 'status' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                    </th>
+                    <th
+                      onClick={() => handleToggleColumnSort('manager')}
+                      style={{
+                        padding: '14px 20px',
+                        fontWeight: 600,
+                        color: columnSort?.column === 'manager' ? '#818cf8' : 'var(--text-muted)',
+                        fontSize: '0.78rem',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      title="Click to sort by Lead Manager"
+                    >
+                      Lead Manager {columnSort?.column === 'manager' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                    </th>
+                    <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                      Action
+                    </th>
                   </tr>
-                ) : (
-                  myLeads.map((lead) => (
-                    <tr key={lead.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <td style={{ padding: '16px 20px' }}>
-                        <span className="user-code-pill" style={{ color: '#818cf8' }}>{lead.lead_code}</span>
+                </thead>
+                <tbody>
+                  {sortedMyLeads.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        No leads found matching your criteria. Convert an enquiry or click "+ Create Lead" to start!
                       </td>
+                    </tr>
+                  ) : (
+                    sortedMyLeads.map((lead) => (
+                      <tr key={lead.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                        <td style={{ padding: '16px 20px' }}>
+                          <span className="user-code-pill" style={{ color: '#818cf8' }}>{lead.lead_code}</span>
+                        </td>
 
-                      <td style={{ padding: '16px 20px' }}>
-                        <div style={{ fontWeight: 600 }}>{lead.institute_name}</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{lead.city} • {lead.institute_type}</div>
-                      </td>
+                        <td style={{ padding: '16px 20px' }}>
+                          <div style={{ fontWeight: 600 }}>{lead.institute_name}</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{lead.city} • {lead.institute_type}</div>
+                        </td>
 
-                      <td style={{ padding: '16px 20px' }}>
-                        {lead.preferred_slot_date || lead.preferred_slot_time || lead.preferred_slot_mode ? (
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.84rem' }}>
-                              {[formatSlotDate(lead.preferred_slot_date), formatSlotTime(lead.preferred_slot_time)].filter(Boolean).join(' • ') || 'Flexible Timing'}
+                        <td style={{ padding: '16px 20px' }}>
+                          {lead.preferred_slot_date || lead.preferred_slot_time || lead.preferred_slot_mode ? (
+                            <div>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.84rem' }}>
+                                {[formatSlotDate(lead.preferred_slot_date), formatSlotTime(lead.preferred_slot_time)].filter(Boolean).join(' • ') || 'Flexible Timing'}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <span>{getSlotModeIcon(lead.preferred_slot_mode)}</span>
+                                <span>{lead.preferred_slot_mode || 'Phone/WhatsApp Call'}</span>
+                              </div>
                             </div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <span>{getSlotModeIcon(lead.preferred_slot_mode)}</span>
-                              <span>{lead.preferred_slot_mode || 'Phone/WhatsApp Call'}</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>— Not specified</span>
-                        )}
-                      </td>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>— Not specified</span>
+                          )}
+                        </td>
 
-                      <td style={{ padding: '16px 20px' }}>
-                        <span
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '9999px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            color: statusColorMap[lead.status] || '#ffffff',
-                            background: `${statusColorMap[lead.status] || '#ffffff'}1a`,
-                            border: `1px solid ${statusColorMap[lead.status] || '#ffffff'}40`,
-                          }}
-                        >
-                          ● {lead.status.replace('_', ' ')}
-                        </span>
-                      </td>
+                        <td style={{ padding: '16px 20px' }}>
+                          {(() => {
+                            const meta = getStatusMeta(lead.status);
+                            return (
+                              <span
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '9999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase',
+                                  color: meta.color,
+                                  background: meta.bgColor,
+                                  border: `1px solid ${meta.borderColor}`,
+                                }}
+                              >
+                                ● {meta.label}
+                              </span>
+                            );
+                          })()}
+                        </td>
 
                       <td style={{ padding: '16px 20px' }}>
                         {lead.manager_name ? (
@@ -607,6 +782,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       )}
 

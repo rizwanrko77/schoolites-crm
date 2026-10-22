@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import LeadDetailModal from '@/components/LeadDetailModal';
 import CreateLeadModal from '@/components/CreateLeadModal';
+import LeadTableControls from '@/components/LeadTableControls';
 import { formatSlotDate, formatSlotTime, getSlotModeIcon } from '@/lib/slotFormat';
+import { getStatusMeta } from '@/lib/leadStatuses';
 
 interface Lead {
   id: string;
@@ -29,6 +31,7 @@ interface Lead {
   preferred_slot_time?: string | null;
   preferred_slot_mode?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export default function AdminLeadsPage() {
@@ -36,17 +39,63 @@ export default function AdminLeadsPage() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [tabFilter, setTabFilter] = useState<'all' | 'duplicates' | 'unassigned' | 'won' | 'lost'>('all');
-  const [search, setSearch] = useState('');
+  
+  // Search, Status Filter & Sorting State with sessionStorage persistence
+  const [search, setSearch] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('admin_leads_search');
+        if (saved) return saved;
+      } catch {}
+    }
+    return '';
+  });
+
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('admin_leads_statuses');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
+
+  const [sortBy, setSortBy] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('admin_leads_sort');
+        if (saved) return saved;
+      } catch {}
+    }
+    return 'created_desc';
+  });
+
+  const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
+
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [availableManagers, setAvailableManagers] = useState<any[]>([]);
   const [toastMsg, setToastMsg] = useState('');
+
+  // Persist filter preferences
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('admin_leads_search', search);
+        sessionStorage.setItem('admin_leads_statuses', JSON.stringify(selectedStatuses));
+        sessionStorage.setItem('admin_leads_sort', sortBy);
+      } catch {}
+    }
+  }, [search, selectedStatuses, sortBy]);
 
   const fetchLeads = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
       if (search.trim()) params.append('search', search.trim());
+      if (selectedStatuses.length > 0) params.append('statuses', selectedStatuses.join(','));
+      params.append('sort_by', sortBy);
 
       const res = await fetch(`/api/leads?${params.toString()}`);
       if (res.ok) {
@@ -75,18 +124,71 @@ export default function AdminLeadsPage() {
       fetchLeads();
     }, 200);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, selectedStatuses, sortBy]);
 
-  let filteredLeads = leads;
+  // Tab Filtering
+  let tabFilteredLeads = leads;
   if (tabFilter === 'duplicates') {
-    filteredLeads = leads.filter((l) => l.is_duplicate && !l.duplicate_flag_cleared);
+    tabFilteredLeads = leads.filter((l) => l.is_duplicate && !l.duplicate_flag_cleared);
   } else if (tabFilter === 'unassigned') {
-    filteredLeads = leads.filter((l) => !l.manager_name || l.status === 'unassigned');
+    tabFilteredLeads = leads.filter((l) => !l.manager_name || l.status === 'unassigned');
   } else if (tabFilter === 'won') {
-    filteredLeads = leads.filter((l) => l.status === 'won');
+    tabFilteredLeads = leads.filter((l) => l.status === 'won');
   } else if (tabFilter === 'lost') {
-    filteredLeads = leads.filter((l) => l.status === 'lost');
+    tabFilteredLeads = leads.filter((l) => l.status === 'lost');
   }
+
+  // Column Header Sorting
+  const filteredLeads = useMemo(() => {
+    if (!columnSort) return tabFilteredLeads;
+    const sorted = [...tabFilteredLeads];
+    const { column, direction } = columnSort;
+    const modifier = direction === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      if (column === 'lead_code') {
+        return a.lead_code.localeCompare(b.lead_code) * modifier;
+      }
+      if (column === 'institute') {
+        return a.institute_name.localeCompare(b.institute_name) * modifier;
+      }
+      if (column === 'slot') {
+        const aSlot = a.preferred_slot_date || '';
+        const bSlot = b.preferred_slot_date || '';
+        return aSlot.localeCompare(bSlot) * modifier;
+      }
+      if (column === 'status') {
+        return (a.status || '').localeCompare(b.status || '') * modifier;
+      }
+      if (column === 'manager') {
+        const aMgr = a.manager_name || 'Unassigned';
+        const bMgr = b.manager_name || 'Unassigned';
+        return aMgr.localeCompare(bMgr) * modifier;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [tabFilteredLeads, columnSort]);
+
+  const handleToggleColumnSort = (col: string) => {
+    if (columnSort?.column === col) {
+      if (columnSort.direction === 'asc') {
+        setColumnSort({ column: col, direction: 'desc' });
+      } else {
+        setColumnSort(null);
+      }
+    } else {
+      setColumnSort({ column: col, direction: 'asc' });
+    }
+  };
+
+  const handleClearAll = () => {
+    setSearch('');
+    setSelectedStatuses([]);
+    setSortBy('created_desc');
+    setColumnSort(null);
+    setTabFilter('all');
+  };
 
   const counts = {
     total: leads.length,
@@ -177,8 +279,8 @@ export default function AdminLeadsPage() {
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="glass-panel" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+      {/* Segment Tabs */}
+      <div className="glass-panel" style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {[
             { id: 'all', label: `All Leads (${counts.total})` },
@@ -200,6 +302,8 @@ export default function AdminLeadsPage() {
                   background: isSelected ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.04)',
                   color: isSelected ? '#ffffff' : 'var(--text-secondary)',
                   border: isSelected ? '1px solid #818cf8' : '1px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 {tab.label}
@@ -207,18 +311,21 @@ export default function AdminLeadsPage() {
             );
           })}
         </div>
-
-        <div style={{ width: '100%', maxWidth: '300px' }}>
-          <input
-            type="text"
-            placeholder="Search by code, institute, SPOC..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="input-field"
-            style={{ padding: '8px 14px', fontSize: '0.88rem' }}
-          />
-        </div>
       </div>
+
+      {/* Reusable Lead Table Controls (Search, Status Checkboxes, Sort Dropdown, Clear All) */}
+      <LeadTableControls
+        search={search}
+        onSearchChange={setSearch}
+        selectedStatuses={selectedStatuses}
+        onStatusesChange={setSelectedStatuses}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        onClearAll={handleClearAll}
+        placeholder="Search by code, institute, city, SPOC, phone, email, manager..."
+        totalCount={leads.length}
+        filteredCount={filteredLeads.length}
+      />
 
       {/* Leads Table */}
       <div className="glass-panel" style={{ overflow: 'hidden' }}>
@@ -226,20 +333,80 @@ export default function AdminLeadsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
-                <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  Lead Code & Owner
+                <th
+                  onClick={() => handleToggleColumnSort('lead_code')}
+                  style={{
+                    padding: '14px 20px',
+                    fontWeight: 600,
+                    color: columnSort?.column === 'lead_code' ? '#818cf8' : 'var(--text-muted)',
+                    fontSize: '0.78rem',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                  title="Click to sort by Lead Code"
+                >
+                  Lead Code & Owner {columnSort?.column === 'lead_code' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                 </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  Institution & City
+                <th
+                  onClick={() => handleToggleColumnSort('institute')}
+                  style={{
+                    padding: '14px 20px',
+                    fontWeight: 600,
+                    color: columnSort?.column === 'institute' ? '#818cf8' : 'var(--text-muted)',
+                    fontSize: '0.78rem',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                  title="Click to sort by Institution Name"
+                >
+                  Institution & City {columnSort?.column === 'institute' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                 </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  Preferred Connect Slot
+                <th
+                  onClick={() => handleToggleColumnSort('slot')}
+                  style={{
+                    padding: '14px 20px',
+                    fontWeight: 600,
+                    color: columnSort?.column === 'slot' ? '#818cf8' : 'var(--text-muted)',
+                    fontSize: '0.78rem',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                  title="Click to sort by Connect Slot"
+                >
+                  Preferred Connect Slot {columnSort?.column === 'slot' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                 </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  Stage Status
+                <th
+                  onClick={() => handleToggleColumnSort('status')}
+                  style={{
+                    padding: '14px 20px',
+                    fontWeight: 600,
+                    color: columnSort?.column === 'status' ? '#818cf8' : 'var(--text-muted)',
+                    fontSize: '0.78rem',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                  title="Click to sort by Stage Status"
+                >
+                  Stage Status {columnSort?.column === 'status' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                 </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  Lead Manager
+                <th
+                  onClick={() => handleToggleColumnSort('manager')}
+                  style={{
+                    padding: '14px 20px',
+                    fontWeight: 600,
+                    color: columnSort?.column === 'manager' ? '#818cf8' : 'var(--text-muted)',
+                    fontSize: '0.78rem',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                  title="Click to sort by Lead Manager"
+                >
+                  Lead Manager {columnSort?.column === 'manager' ? (columnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
                   Action
@@ -306,20 +473,25 @@ export default function AdminLeadsPage() {
                     </td>
 
                     <td style={{ padding: '16px 20px' }}>
-                      <span
-                        style={{
-                          padding: '4px 10px',
-                          borderRadius: '9999px',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          color: statusColorMap[lead.status] || '#ffffff',
-                          background: `${statusColorMap[lead.status] || '#ffffff'}1a`,
-                          border: `1px solid ${statusColorMap[lead.status] || '#ffffff'}40`,
-                        }}
-                      >
-                        ● {lead.status.replace('_', ' ')}
-                      </span>
+                      {(() => {
+                        const meta = getStatusMeta(lead.status);
+                        return (
+                          <span
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '9999px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              color: meta.color,
+                              background: meta.bgColor,
+                              border: `1px solid ${meta.borderColor}`,
+                            }}
+                          >
+                            ● {meta.label}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td style={{ padding: '16px 20px' }}>

@@ -261,3 +261,50 @@ graph TD
 ### Pipeline Table & UI Enhancements:
 * **Full-Width Portal Layout:** Expanded leads tables and views across all roles to utilize full screen width (`w-full max-w-full px-4 sm:px-6 lg:px-8`), eliminating cramped containers and wasted sidebar margins.
 * **Preferred Connect Slot Display:** Replaced redundant SPOC column on pipeline tables with `Preferred Connect Slot` (Date, Time & Discussion Focus) for immediate scheduling visibility across all actors.
+
+---
+
+## 11. Pipeline Table Search, Filter, Sort & Stage Confirmation Architecture
+
+### Comprehensive Multi-Field Search:
+* **All Form Attributes Included:**
+  * Search query in `/api/leads` now inspects 100% of the attributes captured in the lead creation form:
+    * Lead code, institution name, institution type, city, country, student strength.
+    * Current ERP status, existing ERP brand name.
+    * SPOC name, SPOC role, SPOC phone, SPOC email.
+    * Decision Maker name, DM role, DM phone, DM email.
+    * Additional contact name, role, phone, and email.
+    * Decision flow notes, preferred slot date/time/mode, expected start timeline, additional details.
+    * Originating Lead Owner code/name and assigned Lead Manager code/name.
+  * Instant real-time feedback with inline clear (`✕`) button.
+
+### Multi-Select Status Filter & Sorting Controls:
+* **Reusable `LeadTableControls` Component:** Unified across `/admin/leads`, `/business`, and `PartnerWorkspace` (`/referral` & `/presales`).
+* **Multi-Select Stage Popover:**
+  * Displays checklist of all statuses with corresponding colored indicator dots.
+  * Includes quick-action links: `All` (select all) and `Clear` (unselect all).
+  * Dynamic button badge reflects current selection: `All Stages` or `Stage (N)`.
+* **Flexible Sort Dropdown:**
+  * 🕒 Created Time: Newest First (`created_desc` - default)
+  * 🕒 Created Time: Oldest First (`created_asc`)
+  * 🔄 Last Updated: Most Recent First (`updated_desc`)
+  * 🔄 Last Updated: Oldest First (`updated_asc`)
+* **Clickable Table Column Headers:**
+  * Interactive headers on `Lead Code & Owner`, `Institution & City`, `Preferred Connect Slot`, `Stage Status`, and `Lead Manager`.
+  * Visual sort direction indicators (`▲` / `▼` / `↕`) with immediate in-memory reordering.
+* **Filter State Persistence & One-Click Reset:**
+  * State persists in browser `sessionStorage` per portal view, preventing loss of filters when opening lead detail modals or refreshing.
+  * Prominent `✕ Clear Filters` button appears whenever search, non-default status filters, or custom sorts are active, restoring default views in one click.
+
+### Accidental Click Prevention: Stage Transition Confirmation Alert:
+* **Safe Transition Modal:**
+  * Changing the status dropdown in `LeadDetailModal` no longer immediately mutates the record.
+  * Prompts the user with a confirmation alert dialog:
+    * Old Stage ➔ New Stage visual transition chips styled with status badge colors.
+    * Closed Deal Governance Caution: Prominently warns when transitioning to `Won 🏆` or `Lost`: *"Marking a deal as Won or Lost finalizes the deal and locks stage/details modification for regular representatives. Only an Administrator can reopen or edit closed deals."*
+    * `Cancel` cleanly reverts the select element without API calls.
+    * `✓ Confirm Stage Change` triggers the PATCH update and refreshes timeline audit logs.
+
+### Centralized Status Architecture (`src/lib/leadStatuses.ts`):
+* Single source of truth defining status keys, human-readable labels, theme colors, background colors, border styles, and closed-deal flags.
+* Architecture designed for future status pipeline expansions (`Assigned`, `Demo scheduled`, `Demo completed`, `In Discussion`, `Following up`, `Proposal Sent`, `Onboarding initiated`, `onboarding completed`, `Won 🏆`, `Lost`) with zero UI code duplication.

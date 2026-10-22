@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatSlotDate, formatSlotTime } from '@/lib/slotFormat';
 import { COUNTRIES } from '@/lib/countries';
+import { LEAD_STATUSES, getStatusMeta } from '@/lib/leadStatuses';
 
 interface Note {
   id: string;
@@ -50,6 +51,7 @@ export default function LeadDetailModal({
 
   // Status updating state
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{ from: string; to: string } | null>(null);
 
   // Reassignment state
   const [selectedManagerId, setSelectedManagerId] = useState('');
@@ -337,7 +339,12 @@ export default function LeadDetailModal({
               return (
                 <select
                   value={lead?.status || 'unassigned'}
-                  onChange={(e) => handleStatusChange(e.target.value)}
+                  onChange={(e) => {
+                    const nextVal = e.target.value;
+                    if (nextVal !== (lead?.status || 'unassigned')) {
+                      setPendingStatusChange({ from: lead?.status || 'unassigned', to: nextVal });
+                    }
+                  }}
                   disabled={isUpdatingStatus}
                   className="input-field"
                   style={{
@@ -346,15 +353,16 @@ export default function LeadDetailModal({
                     fontSize: '0.85rem',
                     fontWeight: 700,
                     background: '#0f172a',
-                    color: lead?.status === 'won' ? '#34d399' : lead?.status === 'lost' ? '#f87171' : '#818cf8',
+                    color: getStatusMeta(lead?.status).color,
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    cursor: 'pointer',
                   }}
                 >
-                  <option value="unassigned">● Unassigned</option>
-                  <option value="assigned">● Assigned</option>
-                  <option value="in_discussion">● In Discussion</option>
-                  <option value="proposal_sent">● Proposal Sent</option>
-                  <option value="won">● Deal Won 🏆</option>
-                  <option value="lost">● Closed Lost</option>
+                  {LEAD_STATUSES.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      ● {st.label}
+                    </option>
+                  ))}
                 </select>
               );
             })()}
@@ -1225,6 +1233,148 @@ export default function LeadDetailModal({
                   }}
                 >
                   {confirmDuplicateAction === 'clear' ? 'Yes, Clear Flag' : 'Yes, Disqualify Lead'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* CONFIRMATION FOR STAGE STATUS CHANGE (PREVENT ACCIDENTAL CLICKS) */}
+        {pendingStatusChange && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.75)',
+              zIndex: 1350,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px',
+              animation: 'fadeIn 0.15s ease',
+            }}
+          >
+            <div
+              className="glass-panel"
+              style={{
+                width: '100%',
+                maxWidth: '460px',
+                padding: '24px',
+                background: '#0b1120',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '12px',
+                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.75)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+                  Confirm Stage Transition
+                </h3>
+              </div>
+
+              <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
+                Are you sure you want to change the stage status for <strong>{lead?.institute_name}</strong> ({lead?.lead_code})?
+              </p>
+
+              {/* Transition Indicator */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '14px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-subtle)',
+                  marginBottom: '16px',
+                }}
+              >
+                {(() => {
+                  const fromMeta = getStatusMeta(pendingStatusChange.from);
+                  const toMeta = getStatusMeta(pendingStatusChange.to);
+                  return (
+                    <>
+                      <span
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '9999px',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          color: fromMeta.color,
+                          background: fromMeta.bgColor,
+                          border: `1px solid ${fromMeta.borderColor}`,
+                        }}
+                      >
+                        ● {fromMeta.label}
+                      </span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>➔</span>
+                      <span
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '9999px',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          color: toMeta.color,
+                          background: toMeta.bgColor,
+                          border: `1px solid ${toMeta.borderColor}`,
+                        }}
+                      >
+                        ● {toMeta.label}
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Warning Notice for Won / Lost stages */}
+              {(pendingStatusChange.to === 'won' || pendingStatusChange.to === 'lost') && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    color: '#fbbf24',
+                    fontSize: '0.82rem',
+                    lineHeight: 1.45,
+                    marginBottom: '18px',
+                  }}
+                >
+                  <strong>⚠️ Closed Deal Governance:</strong> Marking a deal as{' '}
+                  <strong>{pendingStatusChange.to === 'won' ? 'Won 🏆' : 'Lost'}</strong> finalizes the deal and locks
+                  stage/details modification for regular representatives. Only an Administrator can reopen or edit closed deals.
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPendingStatusChange(null)}
+                  disabled={isUpdatingStatus}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const targetStatus = pendingStatusChange.to;
+                    await handleStatusChange(targetStatus);
+                    setPendingStatusChange(null);
+                  }}
+                  disabled={isUpdatingStatus}
+                  className="btn-primary"
+                  style={{
+                    background:
+                      pendingStatusChange.to === 'won'
+                        ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                        : pendingStatusChange.to === 'lost'
+                        ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                        : undefined,
+                  }}
+                >
+                  {isUpdatingStatus ? 'Updating Stage...' : '✓ Confirm Stage Change'}
                 </button>
               </div>
             </div>

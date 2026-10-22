@@ -11,8 +11,9 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const view = searchParams.get('view') || 'all'; // 'unassigned', 'my', 'all', 'created_by_me'
-    const status = searchParams.get('status');
-    const search = searchParams.get('search')?.toLowerCase() || '';
+    const statusParam = searchParams.get('statuses') || searchParams.get('status');
+    const sortBy = searchParams.get('sort_by') || 'created_desc';
+    const search = searchParams.get('search')?.toLowerCase().trim() || '';
 
     let leads = await sql`
       SELECT l.id, l.lead_code, l.owner_id, l.manager_id, l.source_enquiry_id,
@@ -47,20 +48,73 @@ export async function GET(req: NextRequest) {
       leads = leads.filter((l: any) => l.owner_id === user.id);
     }
 
-    if (status && status !== 'all') {
-      leads = leads.filter((l: any) => l.status === status);
+    // Multi-status filtering
+    if (statusParam && statusParam !== 'all') {
+      const activeStatuses = statusParam.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      if (activeStatuses.length > 0) {
+        leads = leads.filter((l: any) => activeStatuses.includes((l.status || '').toLowerCase()));
+      }
     }
 
+    // Comprehensive search covering all fields collected in create lead form + owner and manager
     if (search) {
-      leads = leads.filter(
-        (l: any) =>
-          l.lead_code.toLowerCase().includes(search) ||
-          l.institute_name.toLowerCase().includes(search) ||
-          l.spoc_name.toLowerCase().includes(search) ||
-          l.spoc_phone.toLowerCase().includes(search) ||
-          (l.dm_name && l.dm_name.toLowerCase().includes(search))
-      );
+      leads = leads.filter((l: any) => {
+        const matchField = (val?: string | null) => (val ? val.toLowerCase().includes(search) : false);
+
+        return (
+          matchField(l.lead_code) ||
+          matchField(l.institute_name) ||
+          matchField(l.institute_type) ||
+          matchField(l.city) ||
+          matchField(l.country) ||
+          matchField(l.student_strength) ||
+          matchField(l.current_erp_name) ||
+          matchField(l.current_erp) ||
+          matchField(l.spoc_name) ||
+          matchField(l.spoc_role) ||
+          matchField(l.spoc_phone) ||
+          matchField(l.spoc_email) ||
+          matchField(l.dm_name) ||
+          matchField(l.dm_role) ||
+          matchField(l.dm_phone) ||
+          matchField(l.dm_email) ||
+          matchField(l.additional_contact_name) ||
+          matchField(l.additional_contact_role) ||
+          matchField(l.additional_contact_phone) ||
+          matchField(l.additional_contact_email) ||
+          matchField(l.decision_flow) ||
+          matchField(l.preferred_slot_time) ||
+          matchField(l.preferred_slot_mode) ||
+          matchField(l.expected_start_date) ||
+          matchField(l.additional_details) ||
+          matchField(l.owner_name) ||
+          matchField(l.owner_code) ||
+          matchField(l.manager_name) ||
+          matchField(l.manager_code) ||
+          matchField(l.status)
+        );
+      });
     }
+
+    // Sort leads according to sortBy query
+    leads.sort((a: any, b: any) => {
+      const aCreated = new Date(a.created_at).getTime();
+      const bCreated = new Date(b.created_at).getTime();
+      const aUpdated = new Date(a.updated_at || a.created_at).getTime();
+      const bUpdated = new Date(b.updated_at || b.created_at).getTime();
+
+      switch (sortBy) {
+        case 'created_asc':
+          return aCreated - bCreated;
+        case 'updated_desc':
+          return bUpdated - aUpdated;
+        case 'updated_asc':
+          return aUpdated - bUpdated;
+        case 'created_desc':
+        default:
+          return bCreated - aCreated;
+      }
+    });
 
     return NextResponse.json({ leads });
   } catch (err: any) {
