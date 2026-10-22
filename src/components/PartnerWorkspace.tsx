@@ -515,7 +515,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                     Institution
                   </th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Assigned BR Manager
+                    Lead Manager
                   </th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                     Current Stage

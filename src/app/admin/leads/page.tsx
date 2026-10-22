@@ -223,7 +223,7 @@ export default function AdminLeadsPage() {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  Lead Code & Origin
+                  Lead Code & Owner
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                   Institution & City
@@ -238,7 +238,7 @@ export default function AdminLeadsPage() {
                   Stage Status
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  Assigned Handler
+                  Lead Manager
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
                   Actions
@@ -277,7 +277,7 @@ export default function AdminLeadsPage() {
                         )}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        Created by: {lead.owner_code} ({lead.owner_name})
+                        Lead Owner: {lead.owner_code} ({lead.owner_name})
                       </div>
                     </td>
 

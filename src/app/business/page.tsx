@@ -502,7 +502,7 @@ export default function BusinessRelationsPage() {
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
                       <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Lead Code & Origin
+                        Lead Code & Owner
                       </th>
                       <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                         Institution & City
@@ -514,7 +514,7 @@ export default function BusinessRelationsPage() {
                         Stage Status
                       </th>
                       <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Assigned Closer
+                        Lead Manager
                       </th>
                       <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
                         Action
@@ -556,7 +556,7 @@ export default function BusinessRelationsPage() {
                               )}
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              Origin: {lead.owner_code} ({lead.owner_name})
+                              Lead Owner: {lead.owner_code} ({lead.owner_name})
                             </div>
                           </td>
 

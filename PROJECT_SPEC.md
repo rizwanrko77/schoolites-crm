@@ -83,11 +83,14 @@ graph TD
 
 ## 5. Security & Business Logic Rules
 
-1. **Dual Credit on Won Deals:** When a deal closes successfully, both the **Owner** (Pre-Sales or Referral creator) and the **Manager** (Business Relations closer) receive their respective incentive percentages.
-2. **Atomic Grab:** Concurrent claims on the same lead use database-level transactional locks (`WHERE assigned_manager_id IS NULL`) to ensure only one user wins.
-3. **Duplicate Detection:** Automatic matching on SPOC Phone Number and Email. Flagged leads remain visible to all parties, but prompt an Admin review action to prevent commission disputes.
-4. **Action Confirmation Modals:** Every sensitive action (deactivating a user, claiming a lead, reassigning, resolving duplicates) requires explicit user confirmation.
-5. **Session & Auth:** Custom secure JWT session cookies with 6-digit email OTPs. Dev mode provides local OTP auto-fill for testing.
+1. **Dual Credit on Won Deals:** When a deal closes successfully, both the **Owner** (Pre-Sales, Referral, or BR creator) and the **Manager** (Business Relations closer) receive their respective incentive percentages.
+2. **Canonical Terminology Standard:**
+   * **Lead Owner:** The individual who originated/created the lead (`owner_id`). Can belong to any team: Business Relations (`BR-xxx`), Referral Partner (`REF-xxx`), or Pre-Sales (`PS-xxx`).
+   * **Lead Manager:** The dedicated representative actively working on, handling, and closing the lead (`manager_id`). Always belongs to the Business Relations team (`BR-xxx`).
+3. **Atomic Grab:** Concurrent claims on the same lead use database-level transactional locks (`WHERE assigned_manager_id IS NULL`) to ensure only one user wins.
+4. **Duplicate Detection:** Automatic matching on SPOC Phone Number and Email. Flagged leads remain visible to all parties, but prompt an Admin review action to prevent commission disputes.
+5. **Action Confirmation Modals:** Every sensitive action (deactivating a user, claiming a lead, reassigning, resolving duplicates) requires explicit user confirmation.
+6. **Session & Auth:** Custom secure JWT session cookies with 6-digit email OTPs. Dev mode provides local OTP auto-fill for testing.
 
 ---
 
@@ -107,6 +110,7 @@ graph TD
 | **ActorShell Architecture** | Unified sticky header and expandable/collapsible sidebar (260px expanded / 72px icon rail with toggle) tailored per actor (Admin, Pre-Sales, Referral, Business Relations) with instant tab-switching, My Account profile dropdown menu, and persistent state | ✅ Complete |
 | **Brand Identity & Favicon** | Integrated official Schoolites circular logo (geometric origami motif + cursive script) across favicon (`/favicon.ico`, `/icon.png`), sidebar brand header (`Schoolites ERP`), login portal, root redirect, and public enquiry page | ✅ Complete |
 | **Mobile Responsiveness Engine** | Universal off-canvas slide drawer (`<= 768px`) with dark backdrop overlay, auto-closing nav links, sticky header with ellipsis protection, fluid workspace containers (`.workspace-container`), responsive horizontal scrolling on all data tables (`.table-responsive`), responsive modal dialogs (`.modal-backdrop` & `.modal-dialog`), and responsive OTP inputs | ✅ Complete |
+| **Lead Terminology Alignment** | Enforced platform-wide canonical terminology: `Lead Owner` (creator across any team) and `Lead Manager` (assigned representative in Business Relations) across tables, modals, cards, and reassign flows | ✅ Complete |
 | **Version Control Sync** | Connected to GitHub (`https://github.com/rizwanrko77/schoolites-crm.git`) on `main` branch with strictly ignored `.env.local` | ✅ Complete |
 | **Phase 5** | Google Places API (New) integration with strict field masking, staging deduplication, and batch lead release | ⏳ Ready to build |
 | **Phase 6** | Deal settlement & bank UTR reference tracking in `/admin/incentives` | ⏳ Ready to build |

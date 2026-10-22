@@ -319,7 +319,7 @@ export default function LeadDetailModal({
                   {/* Attribution Banner */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', padding: '16px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
                     <div>
-                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Lead Origin / Creator</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Lead Owner</span>
                       <strong style={{ color: 'var(--text-primary)' }}>{lead?.owner_name}</strong>
                       <span className="user-code-pill" style={{ marginLeft: '8px', fontSize: '0.75rem' }}>{lead?.owner_code}</span>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>Role: {lead?.owner_role}</span>
@@ -327,7 +327,7 @@ export default function LeadDetailModal({
 
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Assigned Handler (BR)</span>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Lead Manager</span>
                         {(currentUser?.role === 'admin' || lead?.manager_id === currentUser?.id) && (
                           <button
                             onClick={() => setShowReassignModal(true)}
@@ -538,7 +538,7 @@ export default function LeadDetailModal({
             <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '24px' }}>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '8px' }}>Reassign Lead</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Select a Business Relations team member to take ownership of {lead?.lead_code}:
+                Select a Business Relations team member to manage {lead?.lead_code}:
               </p>
 
               <select
