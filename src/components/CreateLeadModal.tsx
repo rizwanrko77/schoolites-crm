@@ -1022,11 +1022,11 @@ export default function CreateLeadModal({
                       Preferred Slot Time {isRequired('preferred_slot_time', false) ? '*' : ''}
                     </label>
                     <input
-                      type="text"
-                      placeholder="e.g. 11:30 AM or 3:00 PM"
+                      type="time"
                       value={formData.preferred_slot_time}
                       onChange={(e) => setFormData({ ...formData, preferred_slot_time: e.target.value })}
                       className="input-field"
+                      style={{ colorScheme: 'dark' }}
                       required={isRequired('preferred_slot_time', false)}
                     />
                   </div>

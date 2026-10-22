@@ -100,7 +100,7 @@ async function main() {
       
       { key: 'decision_flow', label: 'Decision Flow', category: 'pipeline', type: 'textarea', options: [], visible: true, required: false, order: 20 },
       { key: 'preferred_slot_date', label: 'Preferred Connect Date', category: 'pipeline', type: 'date', options: [], visible: true, required: false, order: 21 },
-      { key: 'preferred_slot_time', label: 'Preferred Connect Time', category: 'pipeline', type: 'text', options: [], visible: true, required: false, order: 22 },
+      { key: 'preferred_slot_time', label: 'Preferred Connect Time', category: 'pipeline', type: 'time', options: [], visible: true, required: false, order: 22 },
       { key: 'preferred_slot_mode', label: 'Preferred Connect Mode', category: 'pipeline', type: 'select', options: ['Phone/WhatsApp Call', 'Virtual Meet', 'Unsure'], visible: true, required: false, order: 23 },
       { key: 'expected_start_date', label: 'Expected Implementation Start', category: 'pipeline', type: 'select', options: ['Immediately (Within 1-2 weeks)', 'Within 1 Month', 'Within 2-3 Months', 'Next Academic Session', 'Flexible / Exploring', 'Specific Date...'], visible: true, required: false, order: 24 },
       { key: 'additional_details', label: 'Additional Details', category: 'pipeline', type: 'textarea', options: [], visible: true, required: false, order: 25 },
