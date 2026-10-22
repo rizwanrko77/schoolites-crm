@@ -232,5 +232,32 @@ graph TD
    * Preset options: `Database (Google Places Discovery)`, `Inbound Enquiry`, `Meta Ads`, `Website`, `WhatsApp Campaign`, `Direct Enquiry`, `Other (Custom)`.
    * Smart auto-fill for Enquiry conversions and Google Places staging imports.
 
+---
 
+## 10. Lead Management, Stage Governance & Handover Architecture
 
+### Role-Based Stage Status Permissions:
+* **Status Editing Control:**
+  * **Pre-Sales Representatives & Referral Partners:** Status indicator is strictly rendered as an immutable pill/badge (`● {status}`). They cannot change pipeline stages or progress leads.
+  * **Assigned Lead Manager & Admin:** Status select dropdown is active only for the assigned Lead Manager (`lead.manager_id === user.id`) and system Admins.
+  * **Closed Deals Lock:** Deals in `won` or `lost` states are fully locked from status modification or editing by sales reps. Only Admins can edit or reopen finalized deals to protect commission settlements.
+
+### Lead Details Editing & Audit Trail:
+* **Eligibility:** Lead Owner (creator), assigned Lead Manager, and Admins can click `✏️ Edit Details` in the Lead Detail modal.
+* **Editable Attributes:** Institution name, institution type, country, city, student strength, current ERP status, existing ERP name, expected start timeline, SPOC contacts, Decision Maker contacts, Additional contact details, and preferred connect slot.
+* **Duplicate Safeguards:** Validates SPOC phone and email against existing records upon saving to prevent collisions.
+* **Granular Field-Level Diffs:** Backend compares submitted values against current database state and immutably records a `lead_updated` entry in `audit_logs` containing exact `{ from, to }` transitions for each changed attribute.
+* **Timeline UI:** Tab 4 (Audit Timeline) renders field transition chips (`[field]: [old_val] ➔ [new_val]`) with relative timestamp and actor attribution.
+
+### Business Relations Reassignment & Personal Notes Handover:
+* **Reassignment Permissions:** Only current assigned Lead Manager and Admins have access to the `Reassign ⇄` workflow.
+* **Target Validation:** Targets are restricted strictly to active `business_relations` representatives via `/api/leads/managers`. Reassignment to the current manager or non-BR actors is blocked both on frontend and backend.
+* **Personal Notes Handover Architecture:**
+  * When a lead is reassigned, previous managers' internal notes are preserved with original author attribution.
+  * The newly assigned Lead Manager automatically receives read access to personal notes left by previous BR managers on that lead.
+  * In Tab 2 (Personal Notes), handover notes are distinguished with an amber border and prominent badge: `📋 Handover Note from Previous Manager: [Name] ([Code]) • [Timestamp]`.
+  * **Partner Privacy Isolation:** External Referral Partners and Pre-Sales junior reps continue to only have visibility into `visibility = 'global'` remarks. Private handover notes are completely isolated from external partners.
+
+### Pipeline Table & UI Enhancements:
+* **Full-Width Portal Layout:** Expanded leads tables and views across all roles to utilize full screen width (`w-full max-w-full px-4 sm:px-6 lg:px-8`), eliminating cramped containers and wasted sidebar margins.
+* **Preferred Connect Slot Display:** Replaced redundant SPOC column on pipeline tables with `Preferred Connect Slot` (Date, Time & Discussion Focus) for immediate scheduling visibility across all actors.

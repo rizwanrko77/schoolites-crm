@@ -27,12 +27,22 @@ export async function POST(
 
     const lead = leadRes[0];
 
-    // Only Admin or current assigned Manager can reassign
-    if (user.role !== 'admin' && lead.manager_id !== user.id) {
-      return NextResponse.json({ error: 'Only the assigned manager or an Admin can reassign this lead.' }, { status: 403 });
+    // Deal closed check: Only Admin can reassign won/lost leads
+    if ((lead.status === 'won' || lead.status === 'lost') && user.role !== 'admin') {
+      return NextResponse.json({ error: 'Deal is closed. Only Admin can reassign a finalized deal.' }, { status: 403 });
     }
 
-    // Verify target manager exists and is active
+    // Only Admin or current assigned Manager can reassign
+    if (user.role !== 'admin' && lead.manager_id !== user.id) {
+      return NextResponse.json({ error: 'Only the assigned Lead Manager or an Admin can reassign this lead.' }, { status: 403 });
+    }
+
+    // Cannot reassign to the currently assigned manager
+    if (lead.manager_id === new_manager_id) {
+      return NextResponse.json({ error: 'This lead is already assigned to this representative.' }, { status: 400 });
+    }
+
+    // Verify target manager exists, is active, and belongs to Business Relations
     const targetUserRes = await sql`
       SELECT id, name, user_code, role, is_active 
       FROM users 
@@ -44,6 +54,9 @@ export async function POST(
     }
 
     const targetUser = targetUserRes[0];
+    if (targetUser.role !== 'business_relations') {
+      return NextResponse.json({ error: 'Leads can only be assigned to members of the Business Relations team.' }, { status: 400 });
+    }
 
     const updateRes = await sql`
       UPDATE leads
