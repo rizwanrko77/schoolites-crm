@@ -287,7 +287,7 @@ export default function LeadDetailModal({
         {/* Navigation Tabs */}
         <div style={{ display: 'flex', gap: '8px', padding: '12px 20px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.01)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
           {[
-            { id: 'details', label: 'Lead Overview', icon: '📋' },
+            { id: 'details', label: 'Lead Details', icon: '📋' },
             { id: 'personal_notes', label: `Personal Notes (${personalNotes.length})`, icon: '🔒' },
             { id: 'global_remarks', label: `Global Remarks (${globalRemarks.length})`, icon: '💬' },
             { id: 'history', label: `Audit Timeline (${auditLogs.length})`, icon: '📜' },
