@@ -296,17 +296,29 @@ export default function LeadDetailModal({
               key={t.id}
               onClick={() => setActiveTab(t.id as any)}
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
                 padding: '8px 16px',
                 borderRadius: 'var(--radius-md)',
                 fontSize: '0.86rem',
                 fontWeight: 600,
+                lineHeight: 1,
                 flexShrink: 0,
                 background: activeTab === t.id ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
                 color: activeTab === t.id ? '#ffffff' : 'var(--text-secondary)',
                 border: activeTab === t.id ? '1px solid #818cf8' : '1px solid transparent',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
               }}
             >
-              {t.icon} {t.label}
+              <span style={{ fontSize: '0.95rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center' }}>
+                {t.icon}
+              </span>
+              <span style={{ lineHeight: 1, display: 'inline-flex', alignItems: 'center' }}>
+                {t.label}
+              </span>
             </button>
           ))}
         </div>
