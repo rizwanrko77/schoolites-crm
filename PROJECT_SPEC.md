@@ -219,18 +219,24 @@ graph TD
 * **Business Relations Portal Overhaul:** Sectioned sidebar separating `GLOBAL PIPELINE` (Unassigned Pool, Assigned to Me, All Leads) from `MY DIRECT SOURCING` (My Generated Leads, Inbound Enquiries with `/e/[code]` link + Convert workflow, and Marketing Assets hub).
 
 ### When Resuming Tomorrow Morning:
-1. **Sanity Check:** Active session on `http://localhost:3000` (Admin: `admin@schoolites.com`, Pre-Sales: `rahul.ps@schoolites.com`, Partner: `anita.partner@schoolites.com`, BR: `vikram.br@schoolites.com`).
-2. **Review Business Relations Portal:** Test and walk through any additional workflow nuances or fine-tuning for BR reps.
-3. **Phase 5: Outbound Prospecting Pipeline (Google Places API New):**
-   * Staging table (`db_businesses`) with phone & name deduplication against existing leads and enquiries.
-   * Admin search interface (City / Keyword / Institution Type) with field masking (only Name, City, Type exposed to junior reps until claimed).
-   * Batch release mechanism (10 or 25 leads per batch) allocated to Pre-Sales and Partners.
-4. **Phase 6: Commission & Incentive Settlements:**
-   * `/admin/incentives` clearance modal recording bank UTR / NEFT reference numbers, payout timestamps, and auto-updating partner commission statuses to `cleared`.
-5. **Planned Lead Source Architecture (To be implemented after core flows are finalized):**
-   * Keep `Lead Owner` (Person/Actor who gets credit/commission) and `Lead Source` (Channel/Origin) strictly separate.
-   * Preset options: `Database (Google Places Discovery)`, `Inbound Enquiry`, `Meta Ads`, `Website`, `WhatsApp Campaign`, `Direct Enquiry`, `Other (Custom)`.
-   * Smart auto-fill for Enquiry conversions and Google Places staging imports.
+1. **Manual Testing & Validation Session:**
+   * **Active Session URLs:** `http://localhost:3000`
+     * Admin: `admin@schoolites.com`
+     * Business Relations (Manager): `vikram.br@schoolites.com`
+     * Referral Partner: `anita.partner@schoolites.com`
+     * Pre-Sales Rep: `rahul.ps@schoolites.com`
+     * OTP: `123456`
+   * **Test Checklist:**
+     * **1. Comprehensive Search:** Verify search matches against all 25 form fields (school name, city, phone, email, ERP brand, notes, owner/manager code). Test search clear (`✕`).
+     * **2. Multi-Select Status Filter:** Test stage checkboxes popover, `All Stages`, custom combinations, `All`/`Clear` links, and active count badges (`Stage (N)`).
+     * **3. Sort Selector & Column Headers:** Verify Created Date (Newest/Oldest) and Last Updated (Most Recent/Oldest), plus clicking table headers (`▲`/`▼`) for in-memory sorting.
+     * **4. Filter Persistence & Reset:** Check that filters persist in `sessionStorage` across modal opens/refreshes, and verify `✕ Clear Filters` button restores default view.
+     * **5. Stage Change Confirmation Alert:** Change stage in `LeadDetailModal`, observe old ➔ new transition chips, verify Closed Deal Governance warning for Won/Lost, test `Cancel` (reverts) and `✓ Confirm Stage Change`.
+     * **6. Role-Based Permissions & Handover:** Verify Partners only see read-only status pills and global remarks; verify Lead Managers see handover attribution for previous BR reps' personal notes.
+2. **Next Roadmap Items:**
+   * **Finalize Extended Status Pipeline:** When ready, add extended statuses (`Demo scheduled`, `Demo completed`, `Following up`, `Onboarding initiated`, `Onboarding completed`) to `src/lib/leadStatuses.ts` and update DB check constraint.
+   * **Phase 5: Outbound Prospecting Pipeline (Google Places API New):** Staging table (`db_businesses`), deduplication against existing leads/enquiries, admin keyword search, and batch allocations.
+   * **Phase 6: Commission & Incentive Settlements:** Clearance modal in `/admin/incentives` with UTR/NEFT bank references.
 
 ---
 
