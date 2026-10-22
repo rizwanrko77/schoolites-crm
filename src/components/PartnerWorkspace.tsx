@@ -520,9 +520,6 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                     Stage Status
                   </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Deal Value
-                  </th>
                   <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
                     Action
                   </th>
@@ -531,7 +528,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
               <tbody>
                 {myLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
                       You haven't generated any leads yet. Convert an enquiry or click "+ Create Lead" to start!
                     </td>
                   </tr>
@@ -573,10 +570,6 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                         >
                           ● {lead.status.replace('_', ' ')}
                         </span>
-                      </td>
-
-                      <td style={{ padding: '16px 20px', fontWeight: 600, color: '#34d399' }}>
-                        ₹ {Number(lead.deal_value || 0).toLocaleString('en-IN')}
                       </td>
 
                       <td style={{ padding: '16px 20px', textAlign: 'right' }}>

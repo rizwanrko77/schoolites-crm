@@ -232,9 +232,6 @@ export default function AdminLeadsPage() {
                   SPOC Contact
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                  Deal Value
-                </th>
-                <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
                   Stage Status
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
@@ -248,13 +245,13 @@ export default function AdminLeadsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                     Loading all pipeline leads...
                   </td>
                 </tr>
               ) : filteredLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
                     No leads found matching this filter.
                   </td>
                 </tr>
@@ -291,10 +288,6 @@ export default function AdminLeadsPage() {
                     <td style={{ padding: '16px 20px' }}>
                       <div style={{ fontWeight: 600 }}>{lead.spoc_name}</div>
                       <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>📞 {lead.spoc_phone}</div>
-                    </td>
-
-                    <td style={{ padding: '16px 20px', fontWeight: 600, color: '#34d399' }}>
-                      ₹ {Number(lead.deal_value || 0).toLocaleString('en-IN')}
                     </td>
 
                     <td style={{ padding: '16px 20px' }}>

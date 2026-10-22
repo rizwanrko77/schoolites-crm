@@ -57,32 +57,6 @@ export default function LeadDetailModal({
   // Sensitive Duplicate Action confirmation
   const [confirmDuplicateAction, setConfirmDuplicateAction] = useState<'clear' | 'disqualify' | null>(null);
 
-  // Deal Value editing state
-  const [isEditingDealValue, setIsEditingDealValue] = useState(false);
-  const [dealValueInput, setDealValueInput] = useState('');
-  const [isSavingDealValue, setIsSavingDealValue] = useState(false);
-
-  const handleSaveDealValue = async () => {
-    setIsSavingDealValue(true);
-    try {
-      const val = parseFloat(dealValueInput) || 0;
-      const res = await fetch(`/api/leads/${lead.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deal_value: val }),
-      });
-      if (res.ok) {
-        setIsEditingDealValue(false);
-        fetchLeadDetails();
-        onLeadUpdated();
-      }
-    } catch {
-      alert('Failed to update deal value');
-    } finally {
-      setIsSavingDealValue(false);
-    }
-  };
-
   const fetchLeadDetails = async () => {
     if (!leadId) return;
     try {
@@ -424,50 +398,6 @@ export default function LeadDetailModal({
                     <div style={{ padding: '12px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-sm)' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Expected Start</span>
                       <strong style={{ color: '#38bdf8' }}>{lead?.expected_start_date || 'Within 1 Month'}</strong>
-                    </div>
-
-                    <div style={{ padding: '12px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-sm)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Deal Value</span>
-                        {(currentUser?.role === 'admin' || lead?.manager_id === currentUser?.id) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsEditingDealValue(!isEditingDealValue);
-                              setDealValueInput(String(lead?.deal_value || 0));
-                            }}
-                            style={{ fontSize: '0.72rem', color: '#818cf8', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                          >
-                            {isEditingDealValue ? 'Cancel' : 'Edit ✏️'}
-                          </button>
-                        )}
-                      </div>
-                      {isEditingDealValue ? (
-                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1000"
-                            value={dealValueInput}
-                            onChange={(e) => setDealValueInput(e.target.value)}
-                            className="input-field"
-                            style={{ padding: '4px 8px', fontSize: '0.82rem', height: '28px' }}
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSaveDealValue}
-                            disabled={isSavingDealValue}
-                            className="btn-primary"
-                            style={{ padding: '4px 10px', fontSize: '0.78rem', height: '28px' }}
-                          >
-                            {isSavingDealValue ? '...' : 'Save'}
-                          </button>
-                        </div>
-                      ) : (
-                        <strong style={{ color: Number(lead?.deal_value || 0) > 0 ? '#34d399' : 'var(--text-muted)' }}>
-                          ₹ {Number(lead?.deal_value || 0).toLocaleString('en-IN')}
-                        </strong>
-                      )}
                     </div>
                   </div>
 
