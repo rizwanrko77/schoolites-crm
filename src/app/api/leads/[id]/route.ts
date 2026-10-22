@@ -65,12 +65,12 @@ export async function GET(
       `;
     }
 
-    // Fetch audit history for this lead
+    // Fetch audit history for this lead (latest on top)
     const auditLogs = await sql`
       SELECT id, actor_id, actor_name, action, metadata, created_at
       FROM audit_logs
       WHERE record_type = 'lead' AND record_id = ${id}
-      ORDER BY created_at ASC
+      ORDER BY created_at DESC
     `;
 
     return NextResponse.json({ lead, notes, audit_logs: auditLogs });

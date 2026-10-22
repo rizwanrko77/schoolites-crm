@@ -535,18 +535,107 @@ export default function LeadDetailModal({
 
               {/* TAB 4: AUDIT TIMELINE */}
               {activeTab === 'history' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {auditLogs.map((log) => (
-                    <div key={log.id} style={{ display: 'flex', gap: '14px', fontSize: '0.85rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px' }}>
-                      <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap', fontSize: '0.78rem' }}>
-                        {new Date(log.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <div>
-                        <strong style={{ color: 'var(--text-primary)' }}>{log.actor_name}</strong>: <span style={{ color: '#818cf8', fontWeight: 600 }}>{log.action}</span>
-                        {log.metadata && <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '2px' }}>{JSON.stringify(log.metadata)}</div>}
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {auditLogs.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No audit timeline records found.</p>
+                  ) : (
+                    [...auditLogs]
+                      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                      .map((log) => {
+                        const dateObj = new Date(log.created_at);
+                        const formattedDate = dateObj.toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        });
+                        const formattedTime = dateObj.toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true,
+                        });
+
+                        return (
+                          <div
+                            key={log.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '16px',
+                              fontSize: '0.86rem',
+                              borderBottom: '1px solid var(--border-subtle)',
+                              paddingBottom: '12px',
+                            }}
+                          >
+                            <div style={{ minWidth: '95px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ color: 'var(--text-primary)', fontSize: '0.78rem', fontWeight: 600 }}>
+                                {formattedDate}
+                              </span>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                                {formattedTime}
+                              </span>
+                            </div>
+
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                                <strong style={{ color: 'var(--text-primary)' }}>{log.actor_name}</strong>
+                                <span
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    background:
+                                      log.action === 'lead_created'
+                                        ? 'rgba(56, 189, 248, 0.15)'
+                                        : log.action === 'lead_status_changed'
+                                        ? 'rgba(129, 140, 248, 0.15)'
+                                        : log.action === 'lead_grabbed'
+                                        ? 'rgba(245, 158, 11, 0.15)'
+                                        : log.action === 'lead_reassigned'
+                                        ? 'rgba(192, 132, 252, 0.15)'
+                                        : 'rgba(52, 211, 153, 0.15)',
+                                    color:
+                                      log.action === 'lead_created'
+                                        ? '#38bdf8'
+                                        : log.action === 'lead_status_changed'
+                                        ? '#818cf8'
+                                        : log.action === 'lead_grabbed'
+                                        ? '#f59e0b'
+                                        : log.action === 'lead_reassigned'
+                                        ? '#c084fc'
+                                        : '#34d399',
+                                    border: '1px solid currentColor',
+                                  }}
+                                >
+                                  {log.action.replace(/_/g, ' ')}
+                                </span>
+                              </div>
+
+                              {log.metadata && (
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', background: 'rgba(255, 255, 255, 0.02)', padding: '6px 10px', borderRadius: '4px', marginTop: '4px' }}>
+                                  {log.action === 'lead_status_changed' && log.metadata.from && log.metadata.to ? (
+                                    <span>
+                                      Stage updated from <code style={{ color: '#f59e0b' }}>{log.metadata.from}</code> ➔ <code style={{ color: '#34d399' }}>{log.metadata.to}</code>
+                                    </span>
+                                  ) : log.action === 'lead_created' ? (
+                                    <span>
+                                      Lead registered for <strong>{log.metadata.institute_name || lead?.institute_name}</strong> by {log.metadata.owner_code || log.actor_name}
+                                    </span>
+                                  ) : log.action === 'lead_grabbed' ? (
+                                    <span>
+                                      Claimed by <strong>{log.metadata.manager_code || log.actor_name}</strong>
+                                    </span>
+                                  ) : (
+                                    <span>{JSON.stringify(log.metadata)}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
                 </div>
               )}
             </>
