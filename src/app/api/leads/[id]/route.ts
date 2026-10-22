@@ -19,11 +19,13 @@ export async function GET(
       SELECT l.*,
              u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
              u_mgr.name as manager_name, u_mgr.user_code as manager_code,
-             l_dup.lead_code as duplicate_of_code, l_dup.institute_name as duplicate_of_institute
+             l_dup.lead_code as duplicate_of_code, l_dup.institute_name as duplicate_of_institute,
+             e.enquiry_code as source_enquiry_code
       FROM leads l
       JOIN users u_owner ON l.owner_id = u_owner.id
       LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
       LEFT JOIN leads l_dup ON l.duplicate_of_lead_id = l_dup.id
+      LEFT JOIN enquiries e ON l.source_enquiry_id = e.id
       WHERE l.id = ${id}
       LIMIT 1
     `;

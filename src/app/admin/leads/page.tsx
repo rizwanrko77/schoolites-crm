@@ -241,7 +241,7 @@ export default function AdminLeadsPage() {
                   Lead Manager
                 </th>
                 <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
-                  Actions
+                  Action
                 </th>
               </tr>
             </thead>
@@ -331,7 +331,7 @@ export default function AdminLeadsPage() {
                         className="btn-secondary"
                         style={{ padding: '6px 14px', fontSize: '0.82rem' }}
                       >
-                        View & Manage
+                        View Details
                       </button>
                     </td>
                   </tr>
