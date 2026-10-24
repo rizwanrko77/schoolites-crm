@@ -9,6 +9,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Session required.' }, { status: 401 });
     }
 
+    if (!currentUser.has_database_access && currentUser.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Forbidden: You do not have Places Database Access enabled.' },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { place_id, lead_id, lead_code } = body;
 
@@ -28,6 +35,31 @@ export async function POST(req: NextRequest) {
     }
 
     const place = placeRes[0];
+
+    if (place.assigned_to_user_id !== currentUser.id && currentUser.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'You can only convert places assigned to you.' },
+        { status: 403 }
+      );
+    }
+
+    const leadRes = await sql`
+      SELECT id, lead_code, owner_id
+      FROM leads
+      WHERE id = ${lead_id}
+      LIMIT 1
+    `;
+    if (leadRes.length === 0) {
+      return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
+    }
+    const linkedLead = leadRes[0];
+    if (currentUser.role !== 'admin' && linkedLead.owner_id !== currentUser.id) {
+      return NextResponse.json(
+        { error: 'You can only attach a lead you created.' },
+        { status: 403 }
+      );
+    }
+    const linkedCode = linkedLead.lead_code || lead_code || lead_id;
 
     // Update place status to converted_to_lead
     await sql`
@@ -58,14 +90,14 @@ export async function POST(req: NextRequest) {
         'converted_to_lead',
         ${place.status},
         'converted_to_lead',
-        ${`Converted to CRM Lead [${lead_code || lead_id}] by ${currentUser.name}`},
-        ${JSON.stringify({ lead_id, lead_code, converted_by: currentUser.name })}
+        ${`Converted to CRM Lead [${linkedCode}] by ${currentUser.name}`},
+        ${JSON.stringify({ lead_id, lead_code: linkedCode, converted_by: currentUser.name })}
       );
     `;
 
     return NextResponse.json({
       success: true,
-      message: `Place successfully converted to Lead ${lead_code || ''}`,
+      message: `Place successfully converted to Lead ${linkedCode}`,
     });
   } catch (err: any) {
     console.error('Error in POST /api/database/convert-lead:', err);

@@ -1,32 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateAndSaveOtp } from '@/lib/auth';
+import { AuthRateLimitError, assertSendIpLimit, generateAndSaveOtp } from '@/lib/auth';
+import { isEmailConfigured, sendOtpEmail } from '@/lib/mail';
+
+const GENERIC_MESSAGE = 'If an account exists for this email, a verification code has been sent.';
+
+function clientIp(req: NextRequest): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.headers.get('x-real-ip') || 'local';
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { email } = body;
 
-    if (!email || typeof email !== 'string') {
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
     }
 
-    const code = await generateAndSaveOtp(email);
+    assertSendIpLimit(clientIp(req));
 
-    // In a production email service, we call Resend/SendGrid/SMTP here.
-    // For local dev/testing, we log to server console and provide devOtp for fast testing.
-    console.log(`\n========================================`);
-    console.log(`[AUTH OTP] Destination: ${email}`);
-    console.log(`[AUTH OTP] 6-Digit Code: ${code}`);
-    console.log(`[AUTH OTP] Valid for: 10 minutes`);
-    console.log(`========================================\n`);
+    if (process.env.NODE_ENV === 'production' && !isEmailConfigured()) {
+      return NextResponse.json(
+        { error: 'Email delivery is not configured. Contact an administrator.' },
+        { status: 503 }
+      );
+    }
+
+    const code = await generateAndSaveOtp(email);
+    if (!code) {
+      return NextResponse.json({ success: true, message: GENERIC_MESSAGE });
+    }
+
+    if (!isEmailConfigured()) {
+      return NextResponse.json({
+        success: true,
+        message: 'Email delivery is not configured in this environment. Use the development code shown below.',
+        devOtp: code,
+      });
+    }
+
+    await sendOtpEmail(email.trim().toLowerCase(), code);
 
     return NextResponse.json({
       success: true,
-      message: `A 6-digit verification code has been generated for ${email}.`,
-      // Expose code in dev mode to make pair-programming testing seamless
-      devOtp: process.env.NODE_ENV !== 'production' ? code : undefined,
+      message: GENERIC_MESSAGE,
     });
   } catch (err: any) {
+    if (err instanceof AuthRateLimitError || err?.name === 'AuthRateLimitError') {
+      return NextResponse.json({ error: err.message }, { status: 429 });
+    }
     return NextResponse.json(
       { error: err.message || 'Failed to send verification code.' },
       { status: 400 }

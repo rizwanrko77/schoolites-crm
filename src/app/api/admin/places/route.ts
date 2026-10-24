@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { asIdList, containsPattern, pushParam, type SqlValue } from '@/lib/queryParams';
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,48 +15,52 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status') || 'all';
     const city = searchParams.get('city') || 'all';
     const assignedTo = searchParams.get('assigned_to') || 'all';
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const parsedPage = parseInt(searchParams.get('page') || '1', 10);
+    const parsedLimit = parseInt(searchParams.get('limit') || '50', 10);
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 200) : 50;
     const offset = (page - 1) * limit;
 
-    // Build conditions
+    const params: SqlValue[] = [];
     const conditions: string[] = ['1=1'];
-    const params: any[] = [];
 
     if (status !== 'all') {
       if (status === 'fresh') {
         conditions.push(`(b.status = 'fresh' OR b.status = 'unassigned') AND b.assigned_to_user_id IS NULL`);
       } else {
-        conditions.push(`b.status = '${status.replace(/'/g, "''")}'`);
+        conditions.push(`b.status = ${pushParam(params, status)}`);
       }
     }
 
     if (city !== 'all') {
-      conditions.push(`LOWER(b.city) = '${city.toLowerCase().replace(/'/g, "''")}'`);
+      conditions.push(`LOWER(b.city) = ${pushParam(params, city.toLowerCase())}`);
     }
 
     if (assignedTo !== 'all') {
       if (assignedTo === 'unassigned') {
         conditions.push(`b.assigned_to_user_id IS NULL`);
       } else {
-        conditions.push(`b.assigned_to_user_id = '${assignedTo.replace(/'/g, "''")}'`);
+        conditions.push(`b.assigned_to_user_id::text = ${pushParam(params, assignedTo)}`);
       }
     }
 
     if (search) {
-      const s = search.replace(/'/g, "''");
+      const pattern = pushParam(params, containsPattern(search));
       conditions.push(`(
-        LOWER(b.name) LIKE '%${s}%' OR
-        LOWER(b.primary_phone) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.alternative_phone, '')) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.city, '')) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.search_keyword, '')) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.street_address, '')) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.place_id, '')) LIKE '%${s}%'
+        LOWER(b.name) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.primary_phone, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.alternative_phone, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.city, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.search_keyword, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.street_address, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.place_id, '')) LIKE ${pattern} ESCAPE '\\'
       )`);
     }
 
     const whereClause = conditions.join(' AND ');
+    const filterParams = [...params];
+    const limitPlaceholder = pushParam(params, limit);
+    const offsetPlaceholder = pushParam(params, offset);
 
     // Aggregate statistics across the entire database
     const statsQuery = await sql`
@@ -89,7 +94,7 @@ export async function GET(req: NextRequest) {
       SELECT COUNT(*)::int as filtered_total
       FROM db_businesses b
       WHERE ${whereClause}
-    `);
+    `, filterParams);
     const totalFiltered = countQuery[0]?.filtered_total || 0;
 
     // Fetch paginated records with assigned user and lead details
@@ -140,8 +145,8 @@ export async function GET(req: NextRequest) {
       ORDER BY 
         CASE WHEN b.status = 'fresh' THEN 0 ELSE 1 END,
         b.created_at DESC
-      LIMIT ${limit} OFFSET ${offset};
-    `);
+      LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
+    `, params);
 
     return NextResponse.json({
       records: recordsQuery,
@@ -205,27 +210,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Bulk assign records
-    const sanitizedIds = place_ids.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(',');
-    
-    // Fetch places to record audit history
-    const existingPlaces = await sql.query(`
-      SELECT id, place_id, name, status, assigned_to_user_id 
-      FROM db_businesses 
-      WHERE id::text IN (${sanitizedIds}) OR place_id IN (${sanitizedIds});
-    `);
+    const ids = asIdList(place_ids);
+    if (ids.length === 0) {
+      return NextResponse.json({ error: 'Please select at least one place record to assign.' }, { status: 400 });
+    }
 
-    // Perform bulk update
+    const existingPlaces = await sql.query(`
+      SELECT id, place_id, name, status, assigned_to_user_id
+      FROM db_businesses
+      WHERE id::text = ANY($1::text[]) OR place_id = ANY($1::text[])
+    `, [ids]);
+
     await sql.query(`
       UPDATE db_businesses
       SET
-        assigned_to_user_id = '${targetUser.id}',
+        assigned_to_user_id = $1::uuid,
         assigned_at = NOW(),
-        assigned_by = '${currentUser.id}',
+        assigned_by = $2::uuid,
         status = 'new',
         updated_at = NOW()
-      WHERE id::text IN (${sanitizedIds}) OR place_id IN (${sanitizedIds});
-    `);
+      WHERE id::text = ANY($3::text[]) OR place_id = ANY($3::text[])
+    `, [targetUser.id, currentUser.id, ids]);
 
     // Record audit history entries
     for (const p of existingPlaces) {

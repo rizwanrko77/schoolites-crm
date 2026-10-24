@@ -44,6 +44,12 @@ export async function POST(
     const status = ['raised', 'pending', 'cleared', 'cancelled'].includes(body.status)
       ? body.status
       : 'raised';
+    if (status === 'cleared' && user.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Only an administrator can mark an invoice as cleared.' },
+        { status: 403 }
+      );
+    }
     const notes = body.notes ? String(body.notes).trim() : null;
     const paymentMethod = body.payment_method ? String(body.payment_method).trim() : null;
     const paymentReference = body.payment_reference ? String(body.payment_reference).trim() : null;

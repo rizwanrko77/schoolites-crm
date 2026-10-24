@@ -122,7 +122,8 @@ export default function LeadDetailModal({
   const contractAmountNum = parseFloat(contract?.contract_amount) || 0;
   const pendingBalance = Math.max(0, contractAmountNum - totalCleared);
 
-  const isContractEligibleRole = currentUser?.role === 'admin' || currentUser?.role === 'business_relations';
+  const isAdmin = currentUser?.role === 'admin';
+  const isContractEligibleRole = isAdmin || currentUser?.role === 'business_relations';
   const showContractTab = isContractEligibleRole && (lead?.status === 'won' || Boolean(contract));
 
   useEffect(() => {
@@ -1292,7 +1293,7 @@ export default function LeadDetailModal({
                                     </td>
                                     <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                                       <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                                        {inv.status !== 'cleared' && (
+                                        {inv.status !== 'cleared' && isAdmin && (
                                           <button
                                             onClick={() => {
                                               setClearingInvoice(inv);
@@ -1312,22 +1313,26 @@ export default function LeadDetailModal({
                                             Mark Cleared ✓
                                           </button>
                                         )}
-                                        <button
-                                          onClick={() => handleOpenInvoiceModal(inv)}
-                                          className="btn-secondary"
-                                          style={{ padding: '4px 8px', fontSize: '0.76rem' }}
-                                          title="Edit invoice"
-                                        >
-                                          ✏️
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
-                                          className="btn-secondary"
-                                          style={{ padding: '4px 8px', fontSize: '0.76rem', color: '#f87171' }}
-                                          title="Delete invoice"
-                                        >
-                                          🗑️
-                                        </button>
+                                        {(inv.status !== 'cleared' || isAdmin) && (
+                                          <button
+                                            onClick={() => handleOpenInvoiceModal(inv)}
+                                            className="btn-secondary"
+                                            style={{ padding: '4px 8px', fontSize: '0.76rem' }}
+                                            title="Edit invoice"
+                                          >
+                                            ✏️
+                                          </button>
+                                        )}
+                                        {(inv.status !== 'cleared' || isAdmin) && (
+                                          <button
+                                            onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
+                                            className="btn-secondary"
+                                            style={{ padding: '4px 8px', fontSize: '0.76rem', color: '#f87171' }}
+                                            title="Delete invoice"
+                                          >
+                                            🗑️
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -1844,7 +1849,7 @@ export default function LeadDetailModal({
                   >
                     <option value="raised">Raised (Issued)</option>
                     <option value="pending">Pending Client Clearance</option>
-                    <option value="cleared">Cleared (Collected)</option>
+                    {isAdmin && <option value="cleared">Cleared (Collected)</option>}
                   </select>
                 </div>
 

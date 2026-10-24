@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSessionUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { getFromStorage } from '@/lib/storage';
 
@@ -7,19 +8,24 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getSessionUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized: Session required.' }, { status: 401 });
+    }
+
     const { id } = await params;
     const { searchParams } = new URL(req.url);
     const indexParam = searchParams.get('index');
     const isDownload = searchParams.get('download') === 'true';
 
     const [asset] = await sql`
-      SELECT id, title, file_type, content_url, storage_key, files
+      SELECT id, title, file_type, content_url, storage_key, files, is_active
       FROM assets
       WHERE id = ${id}
       LIMIT 1
     `;
 
-    if (!asset) {
+    if (!asset || (!asset.is_active && user.role !== 'admin')) {
       return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
     }
 

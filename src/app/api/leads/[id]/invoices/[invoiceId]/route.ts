@@ -36,6 +36,13 @@ export async function PATCH(
     const status = body.status !== undefined && ['raised', 'pending', 'cleared', 'cancelled'].includes(body.status)
       ? body.status
       : currentInvoice.status;
+
+    if (user.role !== 'admin' && (status === 'cleared' || currentInvoice.status === 'cleared')) {
+      return NextResponse.json(
+        { error: 'Only an administrator can clear an invoice or change a cleared invoice.' },
+        { status: 403 }
+      );
+    }
     
     let clearedAt = currentInvoice.cleared_at;
     if (status === 'cleared' && !currentInvoice.cleared_at) {
@@ -120,6 +127,13 @@ export async function DELETE(
     `;
     if (existingRes.length === 0) {
       return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 });
+    }
+
+    if (existingRes[0].status === 'cleared' && user.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Only an administrator can delete a cleared invoice.' },
+        { status: 403 }
+      );
     }
 
     await sql`

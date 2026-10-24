@@ -18,43 +18,102 @@ export interface UserSession {
 const SESSION_COOKIE_NAME = 'schoolites_session';
 const SESSION_MAX_AGE_DAYS = 30;
 
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_SENDS = 5;
+const OTP_MIN_GAP_MS = 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+const IP_WINDOW_MS = 15 * 60 * 1000;
+const IP_MAX_SENDS = 20;
+const IP_MAX_VERIFIES = 30;
+
+export class AuthRateLimitError extends Error {
+  constructor() {
+    super('Too many verification attempts. Please wait a few minutes and try again.');
+    this.name = 'AuthRateLimitError';
+  }
+}
+
+const ipHits = new Map<string, number[]>();
+
+function allowIp(scope: string, ip: string, limit: number): boolean {
+  const key = `${scope}:${ip || 'unknown'}`;
+  const now = Date.now();
+  const recent = (ipHits.get(key) || []).filter((ts) => now - ts < IP_WINDOW_MS);
+  if (recent.length >= limit) {
+    ipHits.set(key, recent);
+    return false;
+  }
+  recent.push(now);
+  ipHits.set(key, recent);
+  if (ipHits.size > 5000) {
+    const oldest = ipHits.keys().next().value;
+    if (oldest) ipHits.delete(oldest);
+  }
+  return true;
+}
+
+export function assertSendIpLimit(ip: string) {
+  if (!allowIp('otp-send', ip, IP_MAX_SENDS)) {
+    throw new AuthRateLimitError();
+  }
+}
+
+export function assertVerifyIpLimit(ip: string) {
+  if (!allowIp('otp-verify', ip, IP_MAX_VERIFIES)) {
+    throw new AuthRateLimitError();
+  }
+}
+
+function codesMatch(stored: string, provided: string): boolean {
+  const left = Buffer.from(stored);
+  const right = Buffer.from(provided);
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
 /**
- * Generate a cryptographically secure 6-digit OTP
+ * Generate a cryptographically secure 6-digit OTP.
+ * Returns null when no active account exists, so callers can respond
+ * without revealing whether the email is registered.
  */
-export async function generateAndSaveOtp(email: string): Promise<string> {
+export async function generateAndSaveOtp(email: string): Promise<string | null> {
   const normalizedEmail = email.trim().toLowerCase();
-  
-  // Verify user exists and is active
+
+  const recent = await sql`
+    SELECT COUNT(*)::int AS recent_count, MAX(created_at) AS last_sent
+    FROM otps
+    WHERE LOWER(email) = ${normalizedEmail}
+      AND created_at > NOW() - INTERVAL '15 minutes'
+  `;
+  const recentCount = Number(recent[0]?.recent_count || 0);
+  const lastSent = recent[0]?.last_sent ? new Date(recent[0].last_sent).getTime() : 0;
+  if (recentCount >= OTP_MAX_SENDS || (lastSent && Date.now() - lastSent < OTP_MIN_GAP_MS)) {
+    throw new AuthRateLimitError();
+  }
+
   const userRes = await sql`
-    SELECT id, user_code, name, role, is_active 
-    FROM users 
+    SELECT id, is_active
+    FROM users
     WHERE LOWER(email) = ${normalizedEmail}
     LIMIT 1
   `;
 
-  if (userRes.length === 0) {
-    throw new Error('No account found with this email address.');
+  if (userRes.length === 0 || !userRes[0].is_active) {
+    return null;
   }
 
-  if (!userRes[0].is_active) {
-    throw new Error('This account has been deactivated. Please contact an administrator.');
-  }
-
-  // Generate 6-digit code
   const code = Math.floor(100000 + crypto.randomInt(900000)).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
-  // Invalidate previous unconsumed OTPs for this email
   await sql`
-    UPDATE otps 
-    SET consumed = TRUE 
+    UPDATE otps
+    SET consumed = TRUE
     WHERE LOWER(email) = ${normalizedEmail} AND consumed = FALSE
   `;
 
-  // Insert new OTP
   await sql`
-    INSERT INTO otps (email, code, expires_at)
-    VALUES (${normalizedEmail}, ${code}, ${expiresAt.toISOString()})
+    INSERT INTO otps (email, code, expires_at, attempts)
+    VALUES (${normalizedEmail}, ${code}, ${expiresAt.toISOString()}, 0)
   `;
 
   return code;
@@ -67,15 +126,13 @@ export async function verifyOtpAndGetUser(email: string, code: string): Promise<
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = code.trim();
 
-  // Find valid unconsumed OTP
   const otpRes = await sql`
-    SELECT id, expires_at 
-    FROM otps 
-    WHERE LOWER(email) = ${normalizedEmail} 
-      AND code = ${trimmedCode} 
+    SELECT id, code, attempts
+    FROM otps
+    WHERE LOWER(email) = ${normalizedEmail}
       AND consumed = FALSE
       AND expires_at > NOW()
-    ORDER BY created_at DESC 
+    ORDER BY created_at DESC
     LIMIT 1
   `;
 
@@ -83,11 +140,31 @@ export async function verifyOtpAndGetUser(email: string, code: string): Promise<
     throw new Error('Invalid or expired OTP. Please request a new one.');
   }
 
-  // Mark OTP as consumed
+  const otp = otpRes[0];
+  const attempts = Number(otp.attempts || 0);
+  if (attempts >= OTP_MAX_ATTEMPTS) {
+    await sql`UPDATE otps SET consumed = TRUE WHERE id = ${otp.id}`;
+    throw new Error('Too many incorrect attempts. Please request a new code.');
+  }
+
+  if (!codesMatch(String(otp.code), trimmedCode)) {
+    const nextAttempts = attempts + 1;
+    await sql`
+      UPDATE otps
+      SET attempts = ${nextAttempts}, consumed = (${nextAttempts} >= ${OTP_MAX_ATTEMPTS})
+      WHERE id = ${otp.id}
+    `;
+    throw new Error(
+      nextAttempts >= OTP_MAX_ATTEMPTS
+        ? 'Too many incorrect attempts. Please request a new code.'
+        : 'Invalid or expired OTP. Please request a new one.'
+    );
+  }
+
   await sql`
-    UPDATE otps 
-    SET consumed = TRUE 
-    WHERE id = ${otpRes[0].id}
+    UPDATE otps
+    SET consumed = TRUE
+    WHERE id = ${otp.id}
   `;
 
   // Fetch user

@@ -48,8 +48,8 @@ export default function LoginPage() {
       }
 
       setStep('otp');
-      setSuccessMsg(`We sent a 6-digit code to ${email}`);
-      setResendCooldown(30);
+      setSuccessMsg(data.message || 'If an account exists for this email, a verification code has been sent.');
+      setResendCooldown(60);
 
       if (data.devOtp) {
         setDevOtp(data.devOtp);

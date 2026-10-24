@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { containsPattern, pushParam, type SqlValue } from '@/lib/queryParams';
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,31 +42,31 @@ export async function GET(req: NextRequest) {
       LIMIT 1;
     `;
 
-    // Build filter conditions
-    const conditions: string[] = [`b.assigned_to_user_id = '${currentUser.id}'`];
+    const params: SqlValue[] = [];
+    const conditions: string[] = [`b.assigned_to_user_id = ${pushParam(params, currentUser.id)}::uuid`];
 
     if (tab === 'new') {
       conditions.push(`b.status = 'new'`);
     } else {
       conditions.push(`b.status != 'new' AND b.status != 'fresh'`);
       if (status !== 'all') {
-        conditions.push(`b.status = '${status.replace(/'/g, "''")}'`);
+        conditions.push(`b.status = ${pushParam(params, status)}`);
       }
     }
 
     if (city !== 'all') {
-      conditions.push(`LOWER(b.city) = '${city.toLowerCase().replace(/'/g, "''")}'`);
+      conditions.push(`LOWER(b.city) = ${pushParam(params, city.toLowerCase())}`);
     }
 
     if (search) {
-      const s = search.replace(/'/g, "''");
+      const pattern = pushParam(params, containsPattern(search));
       conditions.push(`(
-        LOWER(b.name) LIKE '%${s}%' OR
-        LOWER(b.primary_phone) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.alternative_phone, '')) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.city, '')) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.area, '')) LIKE '%${s}%' OR
-        LOWER(COALESCE(b.street_address, '')) LIKE '%${s}%'
+        LOWER(b.name) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.primary_phone, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.alternative_phone, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.city, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.area, '')) LIKE ${pattern} ESCAPE '\\' OR
+        LOWER(COALESCE(b.street_address, '')) LIKE ${pattern} ESCAPE '\\'
       )`);
     }
 
@@ -113,8 +114,8 @@ export async function GET(req: NextRequest) {
       ORDER BY 
         CASE WHEN b.callback_at IS NOT NULL AND b.callback_at >= NOW() THEN 0 ELSE 1 END,
         b.updated_at DESC
-      LIMIT 100;
-    `);
+      LIMIT 100
+    `, params);
 
     // Available cities for actor's assigned data
     const citiesRes = await sql`

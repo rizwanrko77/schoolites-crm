@@ -23,7 +23,7 @@ export async function POST(
     const grabRes = await sql`
       UPDATE leads
       SET manager_id = ${user.id}, status = 'assigned', updated_at = NOW()
-      WHERE id = ${id} AND (manager_id IS NULL OR status = 'unassigned')
+      WHERE id = ${id} AND manager_id IS NULL
       RETURNING id, lead_code, institute_name, status, manager_id
     `;
 

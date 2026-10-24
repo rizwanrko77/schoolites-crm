@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { asIdList, pushParam, type SqlValue } from '@/lib/queryParams';
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,10 +12,13 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status') || 'pending';
+    const allowedStatuses = ['pending', 'fulfilled', 'rejected'];
 
+    const params: SqlValue[] = [];
     const conditions: string[] = ['1=1'];
     if (status !== 'all') {
-      conditions.push(`r.status = '${status.replace(/'/g, "''")}'`);
+      const safeStatus = allowedStatuses.includes(status) ? status : 'pending';
+      conditions.push(`r.status = ${pushParam(params, safeStatus)}`);
     }
 
     const whereClause = conditions.join(' AND ');
@@ -41,8 +45,8 @@ export async function GET(req: NextRequest) {
       JOIN users u ON r.user_id = u.id
       LEFT JOIN users fb ON r.fulfilled_by = fb.id
       WHERE ${whereClause}
-      ORDER BY r.created_at DESC;
-    `);
+      ORDER BY r.created_at DESC
+    `, params);
 
     return NextResponse.json({ requests });
   } catch (err: any) {
@@ -95,15 +99,20 @@ export async function PATCH(req: NextRequest) {
     // Fulfill request
     let freshRecordsQuery: any[] = [];
 
-    if (Array.isArray(place_ids) && place_ids.length > 0) {
-      const sanitizedInputIds = place_ids.map((id: string) => `'${String(id).replace(/'/g, "''")}'`).join(',');
+    const selectedIds = asIdList(place_ids);
+    if (selectedIds.length > 0) {
       freshRecordsQuery = await sql.query(`
         SELECT id, place_id, name, city, status
         FROM db_businesses
-        WHERE id::text IN (${sanitizedInputIds}) AND (status = 'fresh' OR status = 'unassigned') AND assigned_to_user_id IS NULL;
-      `);
+        WHERE id::text = ANY($1::text[])
+          AND (status = 'fresh' OR status = 'unassigned')
+          AND assigned_to_user_id IS NULL
+      `, [selectedIds]);
     } else {
-      const countToAssign = batch_size || request.requested_count || 25;
+      const requestedSize = Number(batch_size || request.requested_count || 25);
+      const countToAssign = Number.isFinite(requestedSize)
+        ? Math.min(Math.max(Math.floor(requestedSize), 1), 200)
+        : 25;
       const preferredCity = request.preferred_city;
 
       // Fetch fresh records (prioritizing preferred city if specified)
@@ -134,20 +143,18 @@ export async function PATCH(req: NextRequest) {
       }, { status: 400 });
     }
 
-    const placeIds = freshRecordsQuery.map((r: any) => r.id);
-    const sanitizedIds = placeIds.map((id: string) => `'${id}'`).join(',');
+    const placeIds = freshRecordsQuery.map((r: any) => String(r.id));
 
-    // Assign to requesting user
     await sql.query(`
       UPDATE db_businesses
       SET
-        assigned_to_user_id = '${request.user_id}',
+        assigned_to_user_id = $1::uuid,
         assigned_at = NOW(),
-        assigned_by = '${currentUser.id}',
+        assigned_by = $2::uuid,
         status = 'new',
         updated_at = NOW()
-      WHERE id IN (${sanitizedIds});
-    `);
+      WHERE id = ANY($3::uuid[])
+    `, [request.user_id, currentUser.id, placeIds]);
 
     // Mark request fulfilled
     await sql`

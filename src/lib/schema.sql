@@ -28,9 +28,11 @@ CREATE TABLE IF NOT EXISTS otps (
     code VARCHAR(10) NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     consumed BOOLEAN DEFAULT FALSE,
+    attempts INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_otps_email ON otps(email);
+CREATE INDEX IF NOT EXISTS idx_otps_email_created ON otps(email, created_at DESC);
 
 -- 4. Active Sessions
 CREATE TABLE IF NOT EXISTS sessions (
@@ -74,8 +76,10 @@ CREATE TABLE IF NOT EXISTS enquiries (
     student_count VARCHAR(50),
     website VARCHAR(255),
     message TEXT,
-    status VARCHAR(50) DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'converted_to_lead', 'discarded')),
+    status VARCHAR(50) DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'in_discussion', 'converted_to_lead', 'discarded')),
     converted_lead_id UUID,
+    internal_notes TEXT,
+    claimed_at TIMESTAMP WITH TIME ZONE,
     custom_data JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -328,4 +332,107 @@ CREATE TABLE IF NOT EXISTS contract_invoices (
 CREATE INDEX IF NOT EXISTS idx_contract_invoices_contract ON contract_invoices(contract_id);
 CREATE INDEX IF NOT EXISTS idx_contract_invoices_lead ON contract_invoices(lead_id);
 CREATE INDEX IF NOT EXISTS idx_contract_invoices_status ON contract_invoices(status);
+
+-- 16. Per-actor commission shares generated from contract invoices
+CREATE TABLE IF NOT EXISTS actor_commission_payouts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invoice_id UUID NOT NULL REFERENCES contract_invoices(id) ON DELETE CASCADE,
+    contract_id UUID NOT NULL REFERENCES lead_contracts(id) ON DELETE CASCADE,
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_role VARCHAR(50) NOT NULL CHECK (actor_role IN ('promoter', 'owner', 'manager')),
+    commission_rate NUMERIC(5, 2) NOT NULL DEFAULT 10.00,
+    invoice_amount NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+    payout_amount NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+    invoice_status VARCHAR(50) NOT NULL DEFAULT 'raised',
+    payout_status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (payout_status IN ('pending', 'paid')),
+    paid_at TIMESTAMP WITH TIME ZONE,
+    payment_method VARCHAR(100),
+    payment_reference VARCHAR(100),
+    notes TEXT,
+    updated_by UUID REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT uq_invoice_user_role UNIQUE (invoice_id, user_id, actor_role)
+);
+CREATE INDEX IF NOT EXISTS idx_payouts_user ON actor_commission_payouts(user_id);
+CREATE INDEX IF NOT EXISTS idx_payouts_invoice ON actor_commission_payouts(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_payouts_status ON actor_commission_payouts(payout_status);
+CREATE INDEX IF NOT EXISTS idx_payouts_lead ON actor_commission_payouts(lead_id);
+
+-- Idempotent upgrades for databases created before later columns and tables existed.
+-- Safe to re-run: CREATE TABLE above is IF NOT EXISTS, and these ALTERs fill gaps.
+ALTER TABLE otps ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(5, 2) DEFAULT 10.00;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS has_database_access BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (
+    role IN ('admin', 'pre_sales', 'referral', 'business_relations', 'promoter')
+);
+
+ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS promoter_id UUID REFERENCES users(id);
+ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS internal_notes TEXT;
+ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE enquiries DROP CONSTRAINT IF EXISTS enquiries_status_check;
+ALTER TABLE enquiries ADD CONSTRAINT enquiries_status_check CHECK (
+    status IN ('new', 'contacted', 'in_discussion', 'converted_to_lead', 'discarded')
+);
+CREATE INDEX IF NOT EXISTS idx_enquiries_promoter ON enquiries(promoter_id);
+
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS promoter_id UUID REFERENCES users(id);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS expected_start_date VARCHAR(100);
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_status_check;
+ALTER TABLE leads ADD CONSTRAINT leads_status_check CHECK (
+    status IN (
+        'unassigned', 'assigned', 'demo_scheduled', 'demo_completed', 'in_discussion',
+        'following_up', 'proposal_sent', 'onboarding_initiated', 'onboarding_completed',
+        'won', 'lost'
+    )
+);
+ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_preferred_slot_mode_check;
+ALTER TABLE leads ADD CONSTRAINT leads_preferred_slot_mode_check CHECK (
+    preferred_slot_mode IN ('Phone/WhatsApp Call', 'Virtual Meet', 'Unsure', 'Call', 'Meeting', 'Other')
+);
+CREATE INDEX IF NOT EXISTS idx_leads_promoter ON leads(promoter_id);
+
+ALTER TABLE lead_contracts ADD COLUMN IF NOT EXISTS promoter_rate NUMERIC(5, 2);
+ALTER TABLE lead_contracts ADD COLUMN IF NOT EXISTS owner_rate NUMERIC(5, 2);
+ALTER TABLE lead_contracts ADD COLUMN IF NOT EXISTS manager_rate NUMERIC(5, 2);
+
+ALTER TABLE incentive_configs DROP CONSTRAINT IF EXISTS incentive_configs_role_check;
+ALTER TABLE incentive_configs ADD CONSTRAINT incentive_configs_role_check CHECK (
+    role IN ('pre_sales', 'referral', 'business_relations', 'promoter')
+);
+
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS primary_phone VARCHAR(100);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS alternative_phone VARCHAR(100);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS maps_url TEXT;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS rating NUMERIC(3, 2);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS rating_count INT DEFAULT 0;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS primary_type VARCHAR(100);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS type_tags JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS street_address TEXT;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS area VARCHAR(150);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS postal_code VARCHAR(50);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS country VARCHAR(100) DEFAULT 'India';
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS business_status VARCHAR(50) DEFAULT 'OPERATIONAL';
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS regular_opening_hours JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS search_keyword VARCHAR(255);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS search_city VARCHAR(100);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS search_area VARCHAR(150);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS assigned_by UUID REFERENCES users(id);
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS callback_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE db_businesses ADD COLUMN IF NOT EXISTS converted_lead_id UUID REFERENCES leads(id);
+
+ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS remaining_count INT DEFAULT 0;
+ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS requested_count INT DEFAULT 25;
+ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS preferred_city VARCHAR(100);
+ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS fulfilled_by UUID REFERENCES users(id);
+ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS fulfilled_count INT DEFAULT 0;
 

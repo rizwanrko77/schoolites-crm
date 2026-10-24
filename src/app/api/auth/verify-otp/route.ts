@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyOtpAndGetUser, createSession, setSessionCookie } from '@/lib/auth';
+import { AuthRateLimitError, assertVerifyIpLimit, verifyOtpAndGetUser, createSession, setSessionCookie } from '@/lib/auth';
 import { sql } from '@/lib/db';
+
+function clientIp(req: NextRequest): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.headers.get('x-real-ip') || 'local';
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,6 +16,8 @@ export async function POST(req: NextRequest) {
     if (!email || !code) {
       return NextResponse.json({ error: 'Email and 6-digit verification code are required.' }, { status: 400 });
     }
+
+    assertVerifyIpLimit(clientIp(req));
 
     // Verify OTP and fetch user profile
     const user = await verifyOtpAndGetUser(email, code);
@@ -60,6 +68,9 @@ export async function POST(req: NextRequest) {
       redirectUrl,
     });
   } catch (err: any) {
+    if (err instanceof AuthRateLimitError || err?.name === 'AuthRateLimitError') {
+      return NextResponse.json({ error: err.message }, { status: 429 });
+    }
     return NextResponse.json(
       { error: err.message || 'Verification failed. Please check the code and try again.' },
       { status: 400 }
