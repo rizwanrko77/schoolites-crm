@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { formatSlotDate, formatSlotTime } from '@/lib/slotFormat';
-import { COUNTRIES } from '@/lib/countries';
+import CreateLeadModal from '@/components/CreateLeadModal';
 import { LEAD_STATUSES, getStatusMeta } from '@/lib/leadStatuses';
 
 interface Note {
@@ -43,7 +43,47 @@ export default function LeadDetailModal({
   const [notes, setNotes] = useState<Note[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'personal_notes' | 'global_remarks' | 'history'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'personal_notes' | 'global_remarks' | 'history' | 'contract'>('details');
+
+  // Contract & Invoices state
+  const [contract, setContract] = useState<any | null>(null);
+  const [invoices, setInvoices] = useState<any[]>([]);
+
+  // Contract form modal
+  const [showContractModal, setShowContractModal] = useState(false);
+  const [contractFormData, setContractFormData] = useState({
+    contract_amount: '',
+    duration_months: 12,
+    start_date: '',
+    end_date: '',
+    status: 'active',
+    notes: '',
+  });
+  const [isSavingContract, setIsSavingContract] = useState(false);
+  const [contractError, setContractError] = useState('');
+
+  // Invoice form modal
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [invoiceFormData, setInvoiceFormData] = useState({
+    invoice_number: '',
+    amount: '',
+    raise_date: '',
+    due_date: '',
+    status: 'raised',
+    notes: '',
+  });
+  const [isSavingInvoice, setIsSavingInvoice] = useState(false);
+  const [invoiceError, setInvoiceError] = useState('');
+
+  // Mark Cleared modal
+  const [clearingInvoice, setClearingInvoice] = useState<any | null>(null);
+  const [clearFormData, setClearFormData] = useState({
+    payment_method: 'Bank Transfer / NEFT / RTGS',
+    payment_reference: '',
+    cleared_at: '',
+  });
+  const [isClearingInvoice, setIsClearingInvoice] = useState(false);
 
   // New Note state
   const [noteContent, setNoteContent] = useState('');
@@ -52,6 +92,7 @@ export default function LeadDetailModal({
   // Status updating state
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [pendingStatusChange, setPendingStatusChange] = useState<{ from: string; to: string } | null>(null);
+  const [pendingManagerId, setPendingManagerId] = useState<string>('');
 
   // Reassignment state
   const [selectedManagerId, setSelectedManagerId] = useState('');
@@ -61,23 +102,39 @@ export default function LeadDetailModal({
   // Sensitive Duplicate Action confirmation
   const [confirmDuplicateAction, setConfirmDuplicateAction] = useState<'clear' | 'disqualify' | null>(null);
 
-  // Edit Lead state
+  // Edit Lead modal state
   const [isEditing, setIsEditing] = useState(false);
-  const [editFormData, setEditFormData] = useState<any>({});
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [editError, setEditError] = useState('');
 
   // Reassignment managers list
   const [managersList, setManagersList] = useState<any[]>(availableManagers);
 
+  // Computed values
+  const totalInvoiced = useMemo(() => {
+    return invoices.reduce((sum, inv) => sum + (parseFloat(inv.amount) || 0), 0);
+  }, [invoices]);
+
+  const totalCleared = useMemo(() => {
+    return invoices
+      .filter((inv) => inv.status === 'cleared')
+      .reduce((sum, inv) => sum + (parseFloat(inv.amount) || 0), 0);
+  }, [invoices]);
+
+  const contractAmountNum = parseFloat(contract?.contract_amount) || 0;
+  const pendingBalance = Math.max(0, contractAmountNum - totalCleared);
+
+  const isContractEligibleRole = currentUser?.role === 'admin' || currentUser?.role === 'business_relations';
+  const showContractTab = isContractEligibleRole && (lead?.status === 'won' || Boolean(contract));
+
   useEffect(() => {
-    if (showReassignModal) {
+    if (availableManagers && availableManagers.length > 0) {
+      setManagersList(availableManagers);
+    } else if (currentUser?.role === 'admin' || currentUser?.role === 'business_relations') {
       fetch('/api/leads/managers')
         .then((res) => (res.ok ? res.json() : { managers: [] }))
         .then((data) => setManagersList(data.managers || []))
         .catch((err) => console.error(err));
     }
-  }, [showReassignModal]);
+  }, [availableManagers, currentUser, showReassignModal, pendingStatusChange]);
 
   const fetchLeadDetails = async () => {
     if (!leadId) return;
@@ -89,6 +146,8 @@ export default function LeadDetailModal({
       setLead(data.lead);
       setNotes(data.notes || []);
       setAuditLogs(data.audit_logs || []);
+      setContract(data.contract || null);
+      setInvoices(data.invoices || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -100,24 +159,184 @@ export default function LeadDetailModal({
     fetchLeadDetails();
   }, [leadId]);
 
-  if (!leadId) return null;
-
-  const handleStatusChange = async (newStatus: string) => {
+  const handleStatusChange = async (newStatus: string, managerId?: string | null) => {
     setIsUpdatingStatus(true);
     try {
+      const payload: any = { status: newStatus };
+      if (newStatus === 'unassigned') {
+        payload.manager_id = null;
+      } else if (managerId) {
+        payload.manager_id = managerId;
+      }
+
       const res = await fetch(`/api/leads/${lead.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
       if (res.ok) {
         fetchLeadDetails();
         onLeadUpdated();
+        setPendingStatusChange(null);
+        setPendingManagerId('');
+      } else {
+        alert(data.error || 'Failed to update stage');
       }
     } catch {
       alert('Failed to update stage');
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleOpenContractModal = (existingContract?: any) => {
+    if (existingContract) {
+      setContractFormData({
+        contract_amount: existingContract.contract_amount || '',
+        duration_months: existingContract.duration_months || 12,
+        start_date: existingContract.start_date ? existingContract.start_date.split('T')[0] : '',
+        end_date: existingContract.end_date ? existingContract.end_date.split('T')[0] : '',
+        status: existingContract.status || 'active',
+        notes: existingContract.notes || '',
+      });
+    } else {
+      const today = new Date().toISOString().split('T')[0];
+      const nextYear = new Date();
+      nextYear.setFullYear(nextYear.getFullYear() + 1);
+      setContractFormData({
+        contract_amount: lead?.deal_value ? String(lead.deal_value) : '',
+        duration_months: 12,
+        start_date: today,
+        end_date: nextYear.toISOString().split('T')[0],
+        status: 'active',
+        notes: '',
+      });
+    }
+    setContractError('');
+    setShowContractModal(true);
+  };
+
+  const handleSaveContract = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setContractError('');
+    setIsSavingContract(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/contract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contractFormData),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save contract');
+      setShowContractModal(false);
+      fetchLeadDetails();
+      onLeadUpdated();
+    } catch (err: any) {
+      setContractError(err.message || 'Error saving contract');
+    } finally {
+      setIsSavingContract(false);
+    }
+  };
+
+  const handleOpenInvoiceModal = (inv?: any) => {
+    if (inv) {
+      setEditingInvoiceId(inv.id);
+      setInvoiceFormData({
+        invoice_number: inv.invoice_number || '',
+        amount: String(inv.amount || ''),
+        raise_date: inv.raise_date ? inv.raise_date.split('T')[0] : '',
+        due_date: inv.due_date ? inv.due_date.split('T')[0] : '',
+        status: inv.status || 'raised',
+        notes: inv.notes || '',
+      });
+    } else {
+      setEditingInvoiceId(null);
+      const today = new Date().toISOString().split('T')[0];
+      const nextDue = new Date();
+      nextDue.setDate(nextDue.getDate() + 15);
+      setInvoiceFormData({
+        invoice_number: '', // Do not prefill
+        amount: '',
+        raise_date: today,
+        due_date: nextDue.toISOString().split('T')[0],
+        status: 'raised',
+        notes: '',
+      });
+    }
+    setInvoiceError('');
+    setShowInvoiceModal(true);
+  };
+
+  const handleSaveInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInvoiceError('');
+    setIsSavingInvoice(true);
+    try {
+      const url = editingInvoiceId
+        ? `/api/leads/${lead.id}/invoices/${editingInvoiceId}`
+        : `/api/leads/${lead.id}/invoices`;
+      const method = editingInvoiceId ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(invoiceFormData),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save invoice');
+      setShowInvoiceModal(false);
+      setEditingInvoiceId(null);
+      fetchLeadDetails();
+      onLeadUpdated();
+    } catch (err: any) {
+      setInvoiceError(err.message || 'Error saving invoice');
+    } finally {
+      setIsSavingInvoice(false);
+    }
+  };
+
+  const handleMarkCleared = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clearingInvoice) return;
+    setIsClearingInvoice(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/invoices/${clearingInvoice.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cleared',
+          payment_method: clearFormData.payment_method,
+          payment_reference: clearFormData.payment_reference,
+          cleared_at: clearFormData.cleared_at,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark invoice as cleared');
+      setClearingInvoice(null);
+      fetchLeadDetails();
+      onLeadUpdated();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update invoice');
+    } finally {
+      setIsClearingInvoice(false);
+    }
+  };
+
+  const handleDeleteInvoice = async (invoiceId: string, invoiceNum: string) => {
+    if (!confirm(`Are you sure you want to delete invoice ${invoiceNum}?`)) return;
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/invoices/${invoiceId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        fetchLeadDetails();
+        onLeadUpdated();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to delete invoice');
+      }
+    } catch {
+      alert('Error deleting invoice');
     }
   };
 
@@ -183,67 +402,7 @@ export default function LeadDetailModal({
   };
 
   const handleStartEdit = () => {
-    setEditFormData({
-      institute_name: lead?.institute_name || '',
-      institute_type: lead?.institute_type || 'School',
-      country: lead?.country || 'India',
-      city: lead?.city || '',
-      student_strength: lead?.student_strength || 'Below 500',
-      current_erp: lead?.current_erp || 'unsure',
-      current_erp_name: lead?.current_erp_name || '',
-      spoc_name: lead?.spoc_name || '',
-      spoc_role: lead?.spoc_role || '',
-      spoc_phone: lead?.spoc_phone || '',
-      spoc_email: lead?.spoc_email || '',
-      dm_same_as_spoc: lead?.dm_same_as_spoc || false,
-      dm_name: lead?.dm_name || '',
-      dm_role: lead?.dm_role || '',
-      dm_phone: lead?.dm_phone || '',
-      dm_email: lead?.dm_email || '',
-      additional_contact_name: lead?.additional_contact_name || '',
-      additional_contact_role: lead?.additional_contact_role || '',
-      additional_contact_phone: lead?.additional_contact_phone || '',
-      additional_contact_email: lead?.additional_contact_email || '',
-      decision_flow: lead?.decision_flow || '',
-      preferred_slot_date: lead?.preferred_slot_date ? new Date(lead.preferred_slot_date).toISOString().split('T')[0] : '',
-      preferred_slot_time: lead?.preferred_slot_time || '',
-      preferred_slot_mode: lead?.preferred_slot_mode || 'Phone/WhatsApp Call',
-      expected_start_date: lead?.expected_start_date || '',
-      additional_details: lead?.additional_details || '',
-    });
-    setEditError('');
     setIsEditing(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editFormData.institute_name?.trim()) {
-      setEditError('Institution Name is required.');
-      return;
-    }
-    if (!editFormData.spoc_name?.trim() || !editFormData.spoc_phone?.trim()) {
-      setEditError('SPOC Name and Mobile / WhatsApp are required.');
-      return;
-    }
-    setIsSavingEdit(true);
-    setEditError('');
-    try {
-      const res = await fetch(`/api/leads/${lead.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editFormData),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to update lead details');
-      }
-      setIsEditing(false);
-      fetchLeadDetails();
-      onLeadUpdated();
-    } catch (err: any) {
-      setEditError(err.message || 'Error updating lead details');
-    } finally {
-      setIsSavingEdit(false);
-    }
   };
 
   const isDealClosed = lead?.status === 'won' || lead?.status === 'lost';
@@ -253,6 +412,8 @@ export default function LeadDetailModal({
 
   const personalNotes = notes.filter((n) => n.visibility === 'personal');
   const globalRemarks = notes.filter((n) => n.visibility === 'global');
+
+  if (!leadId) return null;
 
   return (
     <div className="modal-backdrop">
@@ -331,7 +492,7 @@ export default function LeadDetailModal({
                       gap: '6px',
                     }}
                   >
-                    ● {lead?.status ? lead.status.replace(/_/g, ' ') : 'Unassigned'}
+                    {getStatusMeta(lead?.status).label}
                   </span>
                 );
               }
@@ -343,6 +504,15 @@ export default function LeadDetailModal({
                     const nextVal = e.target.value;
                     if (nextVal !== (lead?.status || 'unassigned')) {
                       setPendingStatusChange({ from: lead?.status || 'unassigned', to: nextVal });
+                      if ((!lead?.manager_id || lead?.status === 'unassigned') && nextVal !== 'unassigned') {
+                        if (currentUser?.role === 'business_relations') {
+                          setPendingManagerId(currentUser.id);
+                        } else {
+                          setPendingManagerId('');
+                        }
+                      } else {
+                        setPendingManagerId('');
+                      }
                     }
                   }}
                   disabled={isUpdatingStatus}
@@ -360,7 +530,7 @@ export default function LeadDetailModal({
                 >
                   {LEAD_STATUSES.map((st) => (
                     <option key={st.id} value={st.id}>
-                      ● {st.label}
+                      {st.label}
                     </option>
                   ))}
                 </select>
@@ -420,6 +590,7 @@ export default function LeadDetailModal({
             { id: 'personal_notes', label: `Personal Notes (${personalNotes.length})`, icon: '🔒' },
             { id: 'global_remarks', label: `Global Remarks (${globalRemarks.length})`, icon: '💬' },
             { id: 'history', label: `Audit Timeline (${auditLogs.length})`, icon: '📜' },
+            ...(showContractTab ? [{ id: 'contract', label: `Contract & Invoices ${invoices.length > 0 ? `(${invoices.length})` : ''}`, icon: '📄' }] : []),
           ].map((t) => (
             <button
               key={t.id}
@@ -462,342 +633,7 @@ export default function LeadDetailModal({
             <>
               {/* TAB 1: DETAILS */}
               {activeTab === 'details' && (
-                isEditing ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
-                      <div>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          ✏️ Edit Lead Details: <span style={{ color: '#818cf8' }}>{lead?.lead_code}</span>
-                        </h3>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                          Updates will be saved and recorded in the audit history.
-                        </p>
-                      </div>
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button
-                          onClick={() => setIsEditing(false)}
-                          className="btn-secondary"
-                          style={{ padding: '6px 14px', fontSize: '0.82rem' }}
-                          disabled={isSavingEdit}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSaveEdit}
-                          className="btn-primary"
-                          style={{ padding: '6px 16px', fontSize: '0.82rem' }}
-                          disabled={isSavingEdit}
-                        >
-                          {isSavingEdit ? 'Saving...' : 'Save Changes ✓'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {editError && (
-                      <div style={{ padding: '10px 14px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-sm)', color: '#f87171', fontSize: '0.84rem' }}>
-                        ⚠️ {editError}
-                      </div>
-                    )}
-
-                    {/* Section 1: Institution Details */}
-                    <div>
-                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#c7d2fe', marginBottom: '10px' }}>1. Institution Information</h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Institution Name *</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.institute_name}
-                            onChange={(e) => setEditFormData({ ...editFormData, institute_name: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Institution Type</label>
-                          <select
-                            className="input-field"
-                            value={editFormData.institute_type}
-                            onChange={(e) => setEditFormData({ ...editFormData, institute_type: e.target.value })}
-                          >
-                            {['School', 'College', 'University', 'Institution', 'Other'].map(t => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Country</label>
-                          <select
-                            className="input-field"
-                            value={editFormData.country}
-                            onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
-                          >
-                            {COUNTRIES.map(c => (
-                              <option key={c} value={c}>{c}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>City *</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.city}
-                            onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Student Strength</label>
-                          <select
-                            className="input-field"
-                            value={editFormData.student_strength}
-                            onChange={(e) => setEditFormData({ ...editFormData, student_strength: e.target.value })}
-                          >
-                            {['Below 500', '500 - 1000', '1000 - 2000', '2000 - 3000', '3000 - 4000', '4000+'].map(s => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Current ERP</label>
-                          <select
-                            className="input-field"
-                            value={editFormData.current_erp}
-                            onChange={(e) => setEditFormData({ ...editFormData, current_erp: e.target.value })}
-                          >
-                            <option value="no">No ERP</option>
-                            <option value="yes">Yes (Existing System)</option>
-                            <option value="unsure">Unsure / Exploring</option>
-                          </select>
-                        </div>
-                        {editFormData.current_erp === 'yes' && (
-                          <div style={{ gridColumn: 'span 2' }}>
-                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Existing ERP Name</label>
-                            <input
-                              type="text"
-                              className="input-field"
-                              placeholder="e.g. Fedena, Tally, Custom"
-                              value={editFormData.current_erp_name}
-                              onChange={(e) => setEditFormData({ ...editFormData, current_erp_name: e.target.value })}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Section 2: Contact Details */}
-                    <div>
-                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#38bdf8', marginBottom: '10px' }}>2. SPOC & Decision Maker Contacts</h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>SPOC Name *</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.spoc_name}
-                            onChange={(e) => setEditFormData({ ...editFormData, spoc_name: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>SPOC Role / Designation</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.spoc_role}
-                            onChange={(e) => setEditFormData({ ...editFormData, spoc_role: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>SPOC Mobile / WhatsApp *</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.spoc_phone}
-                            onChange={(e) => setEditFormData({ ...editFormData, spoc_phone: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>SPOC Email</label>
-                          <input
-                            type="email"
-                            className="input-field"
-                            value={editFormData.spoc_email}
-                            onChange={(e) => setEditFormData({ ...editFormData, spoc_email: e.target.value })}
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Decision Maker Name</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.dm_name}
-                            onChange={(e) => setEditFormData({ ...editFormData, dm_name: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>DM Role / Designation</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.dm_role}
-                            onChange={(e) => setEditFormData({ ...editFormData, dm_role: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>DM Mobile / WhatsApp</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.dm_phone}
-                            onChange={(e) => setEditFormData({ ...editFormData, dm_phone: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>DM Email</label>
-                          <input
-                            type="email"
-                            className="input-field"
-                            value={editFormData.dm_email}
-                            onChange={(e) => setEditFormData({ ...editFormData, dm_email: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Section 3: Additional Contact */}
-                    <div>
-                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#c084fc', marginBottom: '10px' }}>3. Additional Contact (Optional)</h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Contact Name</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.additional_contact_name}
-                            onChange={(e) => setEditFormData({ ...editFormData, additional_contact_name: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Role / Designation</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.additional_contact_role}
-                            onChange={(e) => setEditFormData({ ...editFormData, additional_contact_role: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Mobile / WhatsApp</label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            value={editFormData.additional_contact_phone}
-                            onChange={(e) => setEditFormData({ ...editFormData, additional_contact_phone: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Email</label>
-                          <input
-                            type="email"
-                            className="input-field"
-                            value={editFormData.additional_contact_email}
-                            onChange={(e) => setEditFormData({ ...editFormData, additional_contact_email: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Section 4: Connect Slot & Timeline */}
-                    <div>
-                      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#34d399', marginBottom: '10px' }}>4. Connect Slot & Timeline</h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Preferred Slot Date</label>
-                          <input
-                            type="date"
-                            className="input-field"
-                            style={{ colorScheme: 'dark' }}
-                            value={editFormData.preferred_slot_date}
-                            onChange={(e) => setEditFormData({ ...editFormData, preferred_slot_date: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Preferred Slot Time</label>
-                          <input
-                            type="time"
-                            className="input-field"
-                            style={{ colorScheme: 'dark' }}
-                            value={editFormData.preferred_slot_time}
-                            onChange={(e) => setEditFormData({ ...editFormData, preferred_slot_time: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Preferred Mode</label>
-                          <select
-                            className="input-field"
-                            value={editFormData.preferred_slot_mode}
-                            onChange={(e) => setEditFormData({ ...editFormData, preferred_slot_mode: e.target.value })}
-                          >
-                            {['Phone/WhatsApp Call', 'Virtual Meet', 'Unsure'].map(m => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Expected Start</label>
-                          <select
-                            className="input-field"
-                            value={editFormData.expected_start_date}
-                            onChange={(e) => setEditFormData({ ...editFormData, expected_start_date: e.target.value })}
-                          >
-                            <option value="">-- Select Timeline --</option>
-                            {['Immediately (Within 1-2 weeks)', 'Within 1 Month', 'Within 2-3 Months', 'Next Academic Session', 'Flexible / Exploring'].map(t => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div style={{ gridColumn: 'span 2' }}>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Decision Flow Notes</label>
-                          <textarea
-                            rows={2}
-                            className="input-field"
-                            value={editFormData.decision_flow}
-                            onChange={(e) => setEditFormData({ ...editFormData, decision_flow: e.target.value })}
-                          />
-                        </div>
-                        <div style={{ gridColumn: 'span 2' }}>
-                          <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Additional Requirements</label>
-                          <textarea
-                            rows={2}
-                            className="input-field"
-                            value={editFormData.additional_details}
-                            onChange={(e) => setEditFormData({ ...editFormData, additional_details: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
-                      <button
-                        onClick={() => setIsEditing(false)}
-                        className="btn-secondary"
-                        style={{ padding: '8px 16px' }}
-                        disabled={isSavingEdit}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSaveEdit}
-                        className="btn-primary"
-                        style={{ padding: '8px 20px' }}
-                        disabled={isSavingEdit}
-                      >
-                        {isSavingEdit ? 'Saving Changes...' : 'Save Changes ✓'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     {canEditLead && (
                       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <button
@@ -827,7 +663,7 @@ export default function LeadDetailModal({
                               onClick={() => setShowReassignModal(true)}
                               style={{ fontSize: '0.75rem', color: '#818cf8', textDecoration: 'underline' }}
                             >
-                              Reassign ⇄
+                              {lead?.manager_id ? 'Reassign ⇄' : '+ Assign Manager'}
                             </button>
                           )}
                         </div>
@@ -921,7 +757,6 @@ export default function LeadDetailModal({
                       </div>
                     )}
                   </div>
-                )
               )}
 
               {/* TAB 2: PERSONAL NOTES */}
@@ -1172,6 +1007,340 @@ export default function LeadDetailModal({
                   )}
                 </div>
               )}
+
+              {/* TAB 5: CONTRACT & INVOICES */}
+              {activeTab === 'contract' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {!contract ? (
+                    <div
+                      className="glass-panel"
+                      style={{
+                        padding: '40px 24px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '12px',
+                      }}
+                    >
+                      <div style={{ fontSize: '2.5rem' }}>📄</div>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>
+                        No Active Contract Configured
+                      </h3>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '480px', margin: 0 }}>
+                        This deal is closed as <strong>Won</strong>! Setup the signed client contract duration, agreed total value, and start generating milestone invoices.
+                      </p>
+                      <button
+                        onClick={() => handleOpenContractModal()}
+                        className="btn-primary"
+                        style={{ marginTop: '8px', padding: '10px 20px', fontSize: '0.9rem' }}
+                      >
+                        + Setup Client Contract
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* 1. Metric Ribbon */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                        <div className="glass-panel" style={{ padding: '16px 20px', borderLeft: '3px solid #818cf8' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            Agreed Contract Value
+                          </span>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ffffff', marginTop: '4px' }}>
+                            ₹{Number(contract.contract_amount || 0).toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#c7d2fe', marginTop: '4px' }}>
+                            Duration: {contract.duration_months} Months
+                          </div>
+                        </div>
+
+                        <div className="glass-panel" style={{ padding: '16px 20px', borderLeft: '3px solid #38bdf8' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            Total Invoiced
+                          </span>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#38bdf8', marginTop: '4px' }}>
+                            ₹{totalInvoiced.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                            {invoices.length} invoice(s) generated
+                          </div>
+                        </div>
+
+                        <div className="glass-panel" style={{ padding: '16px 20px', borderLeft: '3px solid #10b981' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            Cash Collected (Cleared)
+                          </span>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>
+                            ₹{totalCleared.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#34d399', marginTop: '4px' }}>
+                            ● Verified in Bank Account
+                          </div>
+                        </div>
+
+                        <div className="glass-panel" style={{ padding: '16px 20px', borderLeft: '3px solid #f59e0b' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            Balance Pending
+                          </span>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>
+                            ₹{pendingBalance.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                            Potential Uncollected Value
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 2. Contract Terms Card */}
+                      <div className="glass-panel" style={{ padding: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#ffffff' }}>
+                              Contract Agreement Terms
+                            </h4>
+                            <span
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: '9999px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                background:
+                                  contract.status === 'active'
+                                    ? 'rgba(16, 185, 129, 0.15)'
+                                    : contract.status === 'completed'
+                                    ? 'rgba(56, 189, 248, 0.15)'
+                                    : 'rgba(239, 68, 68, 0.15)',
+                                color:
+                                  contract.status === 'active'
+                                    ? '#34d399'
+                                    : contract.status === 'completed'
+                                    ? '#38bdf8'
+                                    : '#f87171',
+                                border: '1px solid currentColor',
+                              }}
+                            >
+                              ● {contract.status} Agreement
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => handleOpenContractModal(contract)}
+                            className="btn-secondary"
+                            style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                          >
+                            ✏️ Edit Terms
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', fontSize: '0.88rem' }}>
+                          <div>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>
+                              Agreement Period
+                            </span>
+                            <strong style={{ color: 'var(--text-primary)' }}>
+                              {contract.start_date ? formatSlotDate(contract.start_date) : 'Not set'} ➔ {contract.end_date ? formatSlotDate(contract.end_date) : 'Not set'}
+                            </strong>
+                          </div>
+                          <div>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>
+                              Duration
+                            </span>
+                            <strong style={{ color: 'var(--text-primary)' }}>
+                              {contract.duration_months} Months
+                            </strong>
+                          </div>
+                          <div>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>
+                              Configured By
+                            </span>
+                            <strong style={{ color: 'var(--text-primary)' }}>
+                              {contract.created_by_name || 'Admin'} {contract.created_by_code ? `(${contract.created_by_code})` : ''}
+                            </strong>
+                          </div>
+                        </div>
+
+                        {contract.notes && (
+                          <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '6px', fontSize: '0.84rem' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
+                              Contract Notes & Terms
+                            </span>
+                            <p style={{ color: 'var(--text-secondary)', margin: 0, whiteSpace: 'pre-wrap' }}>{contract.notes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 3. Invoices Table */}
+                      <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                          <div>
+                            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#ffffff' }}>
+                              Invoices & Payment Milestones
+                            </h4>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '2px 0 0' }}>
+                              Record installments, billings, and track bank collections
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => handleOpenInvoiceModal()}
+                            className="btn-primary"
+                            style={{ padding: '8px 16px', fontSize: '0.84rem' }}
+                          >
+                            + Add Invoice / Installment
+                          </button>
+                        </div>
+
+                        <div className="table-responsive">
+                          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>
+                                  Invoice #
+                                </th>
+                                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>
+                                  Amount
+                                </th>
+                                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>
+                                  Raise Date
+                                </th>
+                                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>
+                                  Due Date
+                                </th>
+                                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>
+                                  Status
+                                </th>
+                                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>
+                                  Collection / Bank Ref
+                                </th>
+                                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                                  Actions
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {invoices.length === 0 ? (
+                                <tr>
+                                  <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                    No invoices generated yet. Click "+ Add Invoice / Installment" to create the payment schedule.
+                                  </td>
+                                </tr>
+                              ) : (
+                                invoices.map((inv) => (
+                                  <tr key={inv.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                    <td style={{ padding: '14px 16px' }}>
+                                      <span className="user-code-pill" style={{ color: '#38bdf8' }}>
+                                        {inv.invoice_number}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '14px 16px', fontWeight: 700, color: '#ffffff' }}>
+                                      ₹{Number(inv.amount).toLocaleString('en-IN')}
+                                    </td>
+                                    <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
+                                      {inv.raise_date ? formatSlotDate(inv.raise_date) : '—'}
+                                    </td>
+                                    <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
+                                      {inv.due_date ? formatSlotDate(inv.due_date) : '—'}
+                                    </td>
+                                    <td style={{ padding: '14px 16px' }}>
+                                      <span
+                                        style={{
+                                          padding: '3px 8px',
+                                          borderRadius: '9999px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          textTransform: 'uppercase',
+                                          background:
+                                            inv.status === 'cleared'
+                                              ? 'rgba(16, 185, 129, 0.15)'
+                                              : inv.status === 'pending'
+                                              ? 'rgba(245, 158, 11, 0.15)'
+                                              : inv.status === 'raised'
+                                              ? 'rgba(56, 189, 248, 0.15)'
+                                              : 'rgba(239, 68, 68, 0.15)',
+                                          color:
+                                            inv.status === 'cleared'
+                                              ? '#34d399'
+                                              : inv.status === 'pending'
+                                              ? '#fbbf24'
+                                              : inv.status === 'raised'
+                                              ? '#38bdf8'
+                                              : '#f87171',
+                                          border: '1px solid currentColor',
+                                        }}
+                                      >
+                                        {inv.status}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '14px 16px' }}>
+                                      {inv.status === 'cleared' ? (
+                                        <div style={{ fontSize: '0.8rem' }}>
+                                          <div style={{ color: '#34d399', fontWeight: 600 }}>
+                                            ✓ {inv.cleared_at ? new Date(inv.cleared_at).toLocaleDateString('en-IN') : 'Cleared'}
+                                          </div>
+                                          {inv.payment_reference && (
+                                            <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', marginTop: '2px' }}>
+                                              Ref: <code style={{ color: '#c7d2fe' }}>{inv.payment_reference}</code>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                          Pending Collection
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                                      <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                                        {inv.status !== 'cleared' && (
+                                          <button
+                                            onClick={() => {
+                                              setClearingInvoice(inv);
+                                              setClearFormData({
+                                                payment_method: 'Bank Transfer / NEFT / RTGS',
+                                                payment_reference: '',
+                                                cleared_at: new Date().toISOString().split('T')[0],
+                                              });
+                                            }}
+                                            className="btn-primary"
+                                            style={{
+                                              padding: '4px 10px',
+                                              fontSize: '0.76rem',
+                                              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                            }}
+                                          >
+                                            Mark Cleared ✓
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => handleOpenInvoiceModal(inv)}
+                                          className="btn-secondary"
+                                          style={{ padding: '4px 8px', fontSize: '0.76rem' }}
+                                          title="Edit invoice"
+                                        >
+                                          ✏️
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
+                                          className="btn-secondary"
+                                          style={{ padding: '4px 8px', fontSize: '0.76rem', color: '#f87171' }}
+                                          title="Delete invoice"
+                                        >
+                                          🗑️
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1180,7 +1349,9 @@ export default function LeadDetailModal({
         {showReassignModal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
             <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '24px' }}>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '8px' }}>Reassign Lead</h3>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '8px' }}>
+                {lead?.manager_id ? 'Reassign Lead' : 'Assign Lead'}
+              </h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                 Select a Business Relations team member to manage {lead?.lead_code}:
               </p>
@@ -1204,7 +1375,7 @@ export default function LeadDetailModal({
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button onClick={() => setShowReassignModal(false)} className="btn-secondary">Cancel</button>
                 <button onClick={handleReassign} disabled={!selectedManagerId || isReassigning} className="btn-primary">
-                  {isReassigning ? 'Reassigning...' : 'Confirm Reassign'}
+                  {isReassigning ? 'Saving...' : lead?.manager_id ? 'Confirm Reassign' : 'Confirm Assignment'}
                 </button>
               </div>
             </div>
@@ -1306,7 +1477,7 @@ export default function LeadDetailModal({
                           border: `1px solid ${fromMeta.borderColor}`,
                         }}
                       >
-                        ● {fromMeta.label}
+                        {fromMeta.label}
                       </span>
                       <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>➔</span>
                       <span
@@ -1320,12 +1491,72 @@ export default function LeadDetailModal({
                           border: `1px solid ${toMeta.borderColor}`,
                         }}
                       >
-                        ● {toMeta.label}
+                        {toMeta.label}
                       </span>
                     </>
                   );
                 })()}
               </div>
+
+              {/* Warning Notice for Unassigning Lead */}
+              {pendingStatusChange.to === 'unassigned' && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#fca5a5',
+                    fontSize: '0.84rem',
+                    lineHeight: 1.45,
+                    marginBottom: '16px',
+                  }}
+                >
+                  <strong>⚠️ Returning to Unassigned Pool:</strong> Changing stage status to{' '}
+                  <strong>Unassigned</strong> will automatically remove{' '}
+                  <strong>{lead?.manager_name ? `${lead.manager_name} (${lead.manager_code || ''})` : 'the assigned manager'}</strong>{' '}
+                  and return this lead to the general unassigned pool.
+                </div>
+              )}
+
+              {/* Lead Manager Selection when moving out of Unassigned Pool */}
+              {(!lead?.manager_id || lead?.status === 'unassigned') && pendingStatusChange.to !== 'unassigned' && (
+                <div style={{ marginBottom: '18px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      color: '#93c5fd',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Assign Lead Manager <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <select
+                    value={pendingManagerId}
+                    onChange={(e) => setPendingManagerId(e.target.value)}
+                    className="input-field"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      fontSize: '0.88rem',
+                      background: '#0f172a',
+                      border: '1px solid rgba(147, 197, 253, 0.35)',
+                    }}
+                  >
+                    <option value="">-- Select Business Relations Representative --</option>
+                    {managersList.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.user_code}) {m.email ? `• ${m.email}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                    Select which representative will take ownership of this lead in their pipeline.
+                  </p>
+                </div>
+              )}
 
               {/* Warning Notice for Won / Lost stages */}
               {(pendingStatusChange.to === 'won' || pendingStatusChange.to === 'lost') && (
@@ -1350,7 +1581,10 @@ export default function LeadDetailModal({
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
                   type="button"
-                  onClick={() => setPendingStatusChange(null)}
+                  onClick={() => {
+                    setPendingStatusChange(null);
+                    setPendingManagerId('');
+                  }}
                   disabled={isUpdatingStatus}
                   className="btn-secondary"
                 >
@@ -1360,16 +1594,22 @@ export default function LeadDetailModal({
                   type="button"
                   onClick={async () => {
                     const targetStatus = pendingStatusChange.to;
-                    await handleStatusChange(targetStatus);
-                    setPendingStatusChange(null);
+                    const isAssigningFromPool =
+                      (!lead?.manager_id || lead?.status === 'unassigned') && targetStatus !== 'unassigned';
+                    await handleStatusChange(targetStatus, isAssigningFromPool ? pendingManagerId : null);
                   }}
-                  disabled={isUpdatingStatus}
+                  disabled={
+                    isUpdatingStatus ||
+                    ((!lead?.manager_id || lead?.status === 'unassigned') &&
+                       pendingStatusChange.to !== 'unassigned' &&
+                       !pendingManagerId)
+                  }
                   className="btn-primary"
                   style={{
                     background:
                       pendingStatusChange.to === 'won'
                         ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                        : pendingStatusChange.to === 'lost'
+                        : pendingStatusChange.to === 'lost' || pendingStatusChange.to === 'unassigned'
                         ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
                         : undefined,
                   }}
@@ -1380,7 +1620,360 @@ export default function LeadDetailModal({
             </div>
           </div>
         )}
+
+        {/* SETUP / EDIT CONTRACT MODAL */}
+        {showContractModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '28px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>
+                  {contract ? 'Edit Client Contract' : 'Setup Client Contract'}
+                </h3>
+                <button onClick={() => setShowContractModal(false)} style={{ color: 'var(--text-muted)', fontSize: '1.2rem' }}>
+                  ✕
+                </button>
+              </div>
+
+              {contractError && (
+                <div style={{ padding: '10px 14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', borderRadius: '6px', fontSize: '0.84rem', marginBottom: '14px' }}>
+                  {contractError}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveContract} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      1. Agreement Status <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <select
+                      value={contractFormData.status}
+                      onChange={(e) => setContractFormData({ ...contractFormData, status: e.target.value })}
+                      className="input-field"
+                      style={{ background: '#0f172a' }}
+                    >
+                      <option value="active">Active Agreement</option>
+                      <option value="completed">Completed / Ended</option>
+                      <option value="renewed">Renewed</option>
+                      <option value="terminated">Terminated</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      2. Contract Duration (Months) <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={contractFormData.duration_months}
+                      onChange={(e) => setContractFormData({ ...contractFormData, duration_months: parseInt(e.target.value, 10) || 12 })}
+                      className="input-field"
+                      placeholder="e.g. 12"
+                      style={{ background: '#0f172a' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      3. Start Date <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={contractFormData.start_date}
+                      onChange={(e) => setContractFormData({ ...contractFormData, start_date: e.target.value })}
+                      className="input-field"
+                      style={{ background: '#0f172a' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      4. End Date <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={contractFormData.end_date}
+                      onChange={(e) => setContractFormData({ ...contractFormData, end_date: e.target.value })}
+                      className="input-field"
+                      style={{ background: '#0f172a' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Agreed Contract Value (₹ INR) <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={contractFormData.contract_amount}
+                    onChange={(e) => setContractFormData({ ...contractFormData, contract_amount: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g. 150000"
+                    style={{ background: '#0f172a' }}
+                  />
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px', display: 'block' }}>
+                    Automatically synchronizes with the lead's deal valuation & revenue calculation.
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Agreement Notes / Special Terms
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={contractFormData.notes}
+                    onChange={(e) => setContractFormData({ ...contractFormData, notes: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g. 50% on signing, 50% after term 1 onboarding..."
+                    style={{ background: '#0f172a', resize: 'vertical' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                  <button type="button" onClick={() => setShowContractModal(false)} className="btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={isSavingContract} className="btn-primary">
+                    {isSavingContract ? 'Saving...' : 'Save Contract Terms'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* CREATE / EDIT INVOICE MODAL */}
+        {showInvoiceModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '460px', padding: '26px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+                  {editingInvoiceId ? 'Edit Invoice' : 'Generate Milestone Invoice'}
+                </h3>
+                <button onClick={() => setShowInvoiceModal(false)} style={{ color: 'var(--text-muted)', fontSize: '1.2rem' }}>
+                  ✕
+                </button>
+              </div>
+
+              {invoiceError && (
+                <div style={{ padding: '10px 14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', borderRadius: '6px', fontSize: '0.84rem', marginBottom: '14px' }}>
+                  {invoiceError}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveInvoice} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Invoice Number <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={invoiceFormData.invoice_number}
+                    onChange={(e) => setInvoiceFormData({ ...invoiceFormData, invoice_number: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g. INV-2024-001"
+                    style={{ background: '#0f172a' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Amount (₹ INR) <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={invoiceFormData.amount}
+                    onChange={(e) => setInvoiceFormData({ ...invoiceFormData, amount: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g. 50000"
+                    style={{ background: '#0f172a' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      Raise Date <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={invoiceFormData.raise_date}
+                      onChange={(e) => setInvoiceFormData({ ...invoiceFormData, raise_date: e.target.value })}
+                      className="input-field"
+                      style={{ background: '#0f172a' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      value={invoiceFormData.due_date}
+                      onChange={(e) => setInvoiceFormData({ ...invoiceFormData, due_date: e.target.value })}
+                      className="input-field"
+                      style={{ background: '#0f172a' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Status
+                  </label>
+                  <select
+                    value={invoiceFormData.status}
+                    onChange={(e) => setInvoiceFormData({ ...invoiceFormData, status: e.target.value })}
+                    className="input-field"
+                    style={{ background: '#0f172a' }}
+                  >
+                    <option value="raised">Raised (Issued)</option>
+                    <option value="pending">Pending Client Clearance</option>
+                    <option value="cleared">Cleared (Collected)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Notes
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={invoiceFormData.notes}
+                    onChange={(e) => setInvoiceFormData({ ...invoiceFormData, notes: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g. First tranche / 50% signing advance..."
+                    style={{ background: '#0f172a', resize: 'vertical' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                  <button type="button" onClick={() => setShowInvoiceModal(false)} className="btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={isSavingInvoice} className="btn-primary">
+                    {isSavingInvoice ? 'Saving...' : editingInvoiceId ? 'Update Invoice' : 'Create Invoice'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MARK CLEARED (PAYMENT COLLECTION) MODAL */}
+        {clearingInvoice && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '26px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#34d399' }}>
+                  ✓ Confirm Payment Clearance
+                </h3>
+                <button onClick={() => setClearingInvoice(null)} style={{ color: 'var(--text-muted)', fontSize: '1.2rem' }}>
+                  ✕
+                </button>
+              </div>
+
+              <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Record payment clearance details for invoice <strong>{clearingInvoice.invoice_number}</strong> (₹{Number(clearingInvoice.amount).toLocaleString('en-IN')}) into the audited ledger.
+              </p>
+
+              <form onSubmit={handleMarkCleared} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Payment Method <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <select
+                    value={clearFormData.payment_method}
+                    onChange={(e) => setClearFormData({ ...clearFormData, payment_method: e.target.value })}
+                    className="input-field"
+                    style={{ background: '#0f172a' }}
+                  >
+                    <option value="Bank Transfer / NEFT / RTGS">Bank Transfer / NEFT / RTGS</option>
+                    <option value="Cheque">Cheque</option>
+                    <option value="UPI">UPI Transfer</option>
+                    <option value="Credit Card / Online Gateway">Credit Card / Online Gateway</option>
+                    <option value="Cash">Cash Deposit</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Reference <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={clearFormData.payment_reference}
+                    onChange={(e) => setClearFormData({ ...clearFormData, payment_reference: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g. UTR / Bank Reference / Cheque #"
+                    style={{ background: '#0f172a' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Clearance Date <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={clearFormData.cleared_at}
+                    onChange={(e) => setClearFormData({ ...clearFormData, cleared_at: e.target.value })}
+                    className="input-field"
+                    style={{ background: '#0f172a' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                  <button type="button" onClick={() => setClearingInvoice(null)} className="btn-secondary">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isClearingInvoice}
+                    className="btn-primary"
+                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                  >
+                    {isClearingInvoice ? 'Recording...' : '✓ Mark Cleared'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Unified Edit Lead Modal */}
+        {isEditing && lead && (
+          <CreateLeadModal
+            isOpen={isEditing}
+            onClose={() => setIsEditing(false)}
+            onSuccess={() => {
+              setIsEditing(false);
+              fetchLeadDetails();
+              onLeadUpdated();
+            }}
+            leadToEdit={lead}
+          />
+        )}
       </div>
     </div>
   );
 }
+

@@ -5,7 +5,8 @@ import LeadDetailModal from '@/components/LeadDetailModal';
 import CreateLeadModal from '@/components/CreateLeadModal';
 import LeadTableControls from '@/components/LeadTableControls';
 import { formatSlotDate, formatSlotTime, getSlotModeIcon } from '@/lib/slotFormat';
-import { getStatusMeta } from '@/lib/leadStatuses';
+import { getStatusMeta, ALL_STATUS_IDS } from '@/lib/leadStatuses';
+import { usePipelineAutoSync } from '@/hooks/usePipelineAutoSync';
 
 interface Lead {
   id: string;
@@ -38,40 +39,48 @@ export default function AdminLeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [tabFilter, setTabFilter] = useState<'all' | 'duplicates' | 'unassigned' | 'won' | 'lost'>('all');
+  type AdminTabType = 'all' | 'duplicates' | 'unassigned' | 'won' | 'lost';
+  const [tabFilter, setTabFilterState] = useState<AdminTabType>('all');
+
+  const setTabFilter = (tab: AdminTabType) => {
+    setTabFilterState(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState(null, '', url.toString());
+    }
+  };
   
   // Search, Status Filter & Sorting State with sessionStorage persistence
-  const [search, setSearch] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('admin_leads_search');
-        if (saved) return saved;
-      } catch {}
-    }
-    return '';
-  });
-
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('admin_leads_statuses');
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return [];
-  });
-
-  const [sortBy, setSortBy] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('admin_leads_sort');
-        if (saved) return saved;
-      } catch {}
-    }
-    return 'created_desc';
-  });
-
+  const [search, setSearch] = useState('');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(ALL_STATUS_IDS);
+  const [sortBy, setSortBy] = useState<string>('created_desc');
   const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // Hydrate URL tab and saved filters safely on mount after initial render
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const paramTab = new URLSearchParams(window.location.search).get('tab') as AdminTabType;
+    const validTabs: AdminTabType[] = ['all', 'duplicates', 'unassigned', 'won', 'lost'];
+    if (paramTab && validTabs.includes(paramTab)) {
+      setTabFilterState(paramTab);
+    }
+
+    try {
+      const savedSearch = sessionStorage.getItem('admin_leads_search');
+      if (savedSearch) setSearch(savedSearch);
+
+      const savedStatuses = sessionStorage.getItem('admin_leads_statuses');
+      if (savedStatuses) {
+        const parsed = JSON.parse(savedStatuses);
+        if (Array.isArray(parsed) && parsed.length > 0) setSelectedStatuses(parsed);
+      }
+
+      const savedSort = sessionStorage.getItem('admin_leads_sort');
+      if (savedSort) setSortBy(savedSort);
+    } catch {}
+  }, []);
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -92,9 +101,16 @@ export default function AdminLeadsPage() {
   const fetchLeads = async () => {
     try {
       setLoading(true);
+      if (selectedStatuses.length === 0) {
+        setLeads([]);
+        setLoading(false);
+        return;
+      }
       const params = new URLSearchParams();
       if (search.trim()) params.append('search', search.trim());
-      if (selectedStatuses.length > 0) params.append('statuses', selectedStatuses.join(','));
+      if (selectedStatuses.length < ALL_STATUS_IDS.length) {
+        params.append('statuses', selectedStatuses.join(','));
+      }
       params.append('sort_by', sortBy);
 
       const res = await fetch(`/api/leads?${params.toString()}`);
@@ -108,6 +124,8 @@ export default function AdminLeadsPage() {
       setLoading(false);
     }
   };
+
+  usePipelineAutoSync(fetchLeads);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -184,7 +202,7 @@ export default function AdminLeadsPage() {
 
   const handleClearAll = () => {
     setSearch('');
-    setSelectedStatuses([]);
+    setSelectedStatuses(ALL_STATUS_IDS);
     setSortBy('created_desc');
     setColumnSort(null);
     setTabFilter('all');
@@ -423,7 +441,9 @@ export default function AdminLeadsPage() {
               ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    No leads found matching this filter.
+                    {selectedStatuses.length === 0
+                      ? 'No stages selected in filter. Please check one or more stages in the Stage dropdown above.'
+                      : 'No leads found matching this filter.'}
                   </td>
                 </tr>
               ) : (
@@ -478,6 +498,9 @@ export default function AdminLeadsPage() {
                         return (
                           <span
                             style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              whiteSpace: 'nowrap',
                               padding: '4px 10px',
                               borderRadius: '9999px',
                               fontSize: '0.75rem',
@@ -488,7 +511,7 @@ export default function AdminLeadsPage() {
                               border: `1px solid ${meta.borderColor}`,
                             }}
                           >
-                            ● {meta.label}
+                            {meta.label}
                           </span>
                         );
                       })()}

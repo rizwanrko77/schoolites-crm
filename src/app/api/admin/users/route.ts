@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch users list
     let users = await sql`
-      SELECT id, user_code, name, email, role, date_of_joining, description, is_active, created_at
+      SELECT id, user_code, name, email, role, commission_rate, date_of_joining, description, is_active, created_at
       FROM users
       ORDER BY created_at DESC
     `;
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
       admin: users.filter((u: any) => u.role === 'admin').length,
       pre_sales: users.filter((u: any) => u.role === 'pre_sales').length,
       referral: users.filter((u: any) => u.role === 'referral').length,
+      promoter: users.filter((u: any) => u.role === 'promoter').length,
       business_relations: users.filter((u: any) => u.role === 'business_relations').length,
     };
 
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Valid email address is required.' }, { status: 400 });
     }
 
-    const validRoles = ['admin', 'pre_sales', 'referral', 'business_relations'];
+    const validRoles = ['admin', 'pre_sales', 'referral', 'business_relations', 'promoter'];
     if (!validRoles.includes(role)) {
       return NextResponse.json({ error: 'Invalid role selected.' }, { status: 400 });
     }
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
       admin: 'ADM',
       pre_sales: 'PS',
       referral: 'REF',
+      promoter: 'PM',
       business_relations: 'BR',
     };
     const prefix = rolePrefixes[role] || 'USR';
@@ -100,12 +102,16 @@ export async function POST(req: NextRequest) {
     const userCode = `${prefix}-${seqRes[0].next_val}`;
 
     const doj = date_of_joining ? date_of_joining : new Date().toISOString().split('T')[0];
+    const defaultRate = role === 'promoter' ? 10.00 : role === 'referral' ? 15.00 : 0.00;
+    const finalRate = body.commission_rate !== undefined && body.commission_rate !== null && body.commission_rate !== ''
+      ? parseFloat(body.commission_rate)
+      : defaultRate;
 
     // Insert new user
     const insertRes = await sql`
-      INSERT INTO users (user_code, name, email, role, date_of_joining, description, is_active)
-      VALUES (${userCode}, ${name.trim()}, ${normalizedEmail}, ${role}, ${doj}, ${description?.trim() || null}, TRUE)
-      RETURNING id, user_code, name, email, role, date_of_joining, description, is_active, created_at
+      INSERT INTO users (user_code, name, email, role, commission_rate, date_of_joining, description, is_active)
+      VALUES (${userCode}, ${name.trim()}, ${normalizedEmail}, ${role}, ${finalRate}, ${doj}, ${description?.trim() || null}, TRUE)
+      RETURNING id, user_code, name, email, role, commission_rate, date_of_joining, description, is_active, created_at
     `;
 
     const newUser = insertRes[0];

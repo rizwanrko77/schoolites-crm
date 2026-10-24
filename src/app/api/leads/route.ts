@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search')?.toLowerCase().trim() || '';
 
     let leads = await sql`
-      SELECT l.id, l.lead_code, l.owner_id, l.manager_id, l.source_enquiry_id,
+      SELECT l.id, l.lead_code, l.owner_id, l.promoter_id, l.manager_id, l.source_enquiry_id,
              l.institute_type, l.institute_name, l.country, l.city, l.student_strength,
              l.current_erp, l.current_erp_name,
              l.spoc_name, l.spoc_role, l.spoc_phone, l.spoc_email,
@@ -26,10 +26,12 @@ export async function GET(req: NextRequest) {
              l.status, l.deal_value, l.is_duplicate, l.duplicate_of_lead_id, l.duplicate_flag_cleared,
              l.created_at, l.updated_at,
              u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
-             u_mgr.name as manager_name, u_mgr.user_code as manager_code
+             u_mgr.name as manager_name, u_mgr.user_code as manager_code,
+             u_prom.name as promoter_name, u_prom.user_code as promoter_code
       FROM leads l
       JOIN users u_owner ON l.owner_id = u_owner.id
       LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+      LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
       ORDER BY l.created_at DESC
     `;
 
@@ -46,6 +48,19 @@ export async function GET(req: NextRequest) {
     // Pre-Sales and Referral partners can only view leads created by themselves
     if (user.role === 'pre_sales' || user.role === 'referral') {
       leads = leads.filter((l: any) => l.owner_id === user.id);
+    } else if (user.role === 'promoter') {
+      // Promoters view only leads originated from their promotional enquiries
+      leads = leads.filter((l: any) => l.promoter_id === user.id);
+      // Mask contact information for promoter privacy protection
+      leads = leads.map((l: any) => ({
+        ...l,
+        spoc_phone: l.spoc_phone ? `${l.spoc_phone.slice(0, 3)}*****${l.spoc_phone.slice(-2)}` : '—',
+        spoc_email: l.spoc_email ? l.spoc_email.replace(/(?<=^.).(?=.*@)/g, '*') : null,
+        dm_phone: null,
+        dm_email: null,
+        additional_contact_phone: null,
+        additional_contact_email: null,
+      }));
     }
 
     // Multi-status filtering
@@ -127,6 +142,13 @@ export async function POST(req: NextRequest) {
     const user = await getSessionUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized: Session required.' }, { status: 401 });
+    }
+
+    if (user.role === 'promoter') {
+      return NextResponse.json(
+        { error: 'Promoters cannot create leads directly. Inbound enquiries are qualified and converted by the Pre-Sales and Business Relations team.' },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();
@@ -245,10 +267,19 @@ export async function POST(req: NextRequest) {
       initialStatus = 'assigned';
     }
 
+    // Inherit promoter_id from source enquiry if present
+    let resolvedPromoterId: string | null = body.promoter_id || null;
+    if (source_enquiry_id && !resolvedPromoterId) {
+      const enqRes = await sql`SELECT promoter_id FROM enquiries WHERE id = ${source_enquiry_id} LIMIT 1`;
+      if (enqRes.length > 0 && enqRes[0].promoter_id) {
+        resolvedPromoterId = enqRes[0].promoter_id;
+      }
+    }
+
     // 4. Insert Lead
     const insertRes = await sql`
       INSERT INTO leads (
-        lead_code, owner_id, manager_id, source_enquiry_id,
+        lead_code, owner_id, promoter_id, manager_id, source_enquiry_id,
         institute_type, institute_name, country, city, student_strength,
         current_erp, current_erp_name,
         spoc_name, spoc_role, spoc_phone, spoc_email,
@@ -257,7 +288,7 @@ export async function POST(req: NextRequest) {
         decision_flow, preferred_slot_date, preferred_slot_time, preferred_slot_mode, expected_start_date, additional_details,
         status, deal_value, is_duplicate, duplicate_of_lead_id
       ) VALUES (
-        ${leadCode}, ${user.id}, ${initialManagerId}, ${source_enquiry_id || null},
+        ${leadCode}, ${user.id}, ${resolvedPromoterId}, ${initialManagerId}, ${source_enquiry_id || null},
         ${institute_type || 'School'}, ${institute_name.trim()}, ${country || 'India'}, ${city || 'Unknown'}, ${student_strength || 'Unspecified'},
         ${finalCurrentErp}, ${current_erp_name || null},
         ${spoc_name.trim()}, ${spoc_role ? spoc_role.trim() : 'SPOC'}, ${cleanSpocPhone}, ${normalizedSpocEmail},

@@ -43,15 +43,13 @@ export default function LeadTableControls({
   }, []);
 
   const allStatusIds = LEAD_STATUSES.map((s) => s.id);
-  const isAllSelected = selectedStatuses.length === 0 || selectedStatuses.length === allStatusIds.length;
-  const isFiltered = Boolean(search.trim()) || (!isAllSelected && selectedStatuses.length > 0) || sortBy !== 'created_desc';
+  const isAllSelected = selectedStatuses.length === allStatusIds.length;
+  const isNoneSelected = selectedStatuses.length === 0;
+  const isFiltered = Boolean(search.trim()) || !isAllSelected || sortBy !== 'created_desc';
 
   const toggleStatus = (id: string) => {
     let newSelection: string[];
-    // If currently all selected (empty or full), clicking one means selecting only the others
-    if (isAllSelected) {
-      newSelection = allStatusIds.filter((sid) => sid !== id);
-    } else if (selectedStatuses.includes(id)) {
+    if (selectedStatuses.includes(id)) {
       newSelection = selectedStatuses.filter((sid) => sid !== id);
     } else {
       newSelection = [...selectedStatuses, id];
@@ -237,7 +235,7 @@ export default function LeadTableControls({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' }}>
                 {LEAD_STATUSES.map((st) => {
-                  const isChecked = isAllSelected ? true : selectedStatuses.includes(st.id);
+                  const isChecked = selectedStatuses.includes(st.id);
                   return (
                     <label
                       key={st.id}

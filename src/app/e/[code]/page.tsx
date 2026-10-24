@@ -1,7 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
+import { COUNTRIES } from '@/lib/countries';
+
+const STUDENT_STRENGTH_OPTIONS = [
+  'Below 500',
+  '500 - 1000',
+  '1000 - 2000',
+  '2000 - 3000',
+  '3000 - 4000',
+  '4000+',
+];
 
 interface FormField {
   id: string;
@@ -74,6 +84,21 @@ function EnquiryContent() {
   const [submitError, setSubmitError] = useState('');
   const [submittedCode, setSubmittedCode] = useState<string | null>(null);
 
+  // Selectable Country state
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+  const countryDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(event.target as Node)) {
+        setIsCountryOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   useEffect(() => {
     if (!code) return;
 
@@ -90,11 +115,20 @@ function EnquiryContent() {
         setOwner(data.owner);
         setFields(data.fields || []);
 
-        // Pre-fill default select fields
+        // Pre-fill default select fields (keep student capacity unselected so applicant chooses explicitly)
         const initialData: Record<string, any> = { country: 'India', institute_type: 'School' };
         data.fields.forEach((f: FormField) => {
-          if (f.field_type === 'select' && f.options && f.options.length > 0) {
+          if (
+            f.field_type === 'select' &&
+            f.field_key !== 'student_count' &&
+            f.field_key !== 'student_strength' &&
+            f.options &&
+            f.options.length > 0
+          ) {
             initialData[f.field_key] = f.options[0];
+          }
+          if (f.field_key === 'student_count' || f.field_key === 'student_strength') {
+            initialData[f.field_key] = '';
           }
         });
         setFormData(initialData);
@@ -399,7 +433,113 @@ function EnquiryContent() {
                     {field.label} {field.is_required && <span style={{ color: '#f87171' }}>*</span>}
                   </label>
 
-                  {field.field_type === 'select' ? (
+                  {field.field_key === 'country' ? (
+                    <div ref={countryDropdownRef} style={{ position: 'relative' }}>
+                      <div
+                        onClick={() => setIsCountryOpen(!isCountryOpen)}
+                        className="input-field"
+                        style={{
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          background: '#0f172a',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <span style={{ color: formData.country ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                          {formData.country || 'Select Country...'}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>▼</span>
+                      </div>
+
+                      {isCountryOpen && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            zIndex: 100,
+                            background: '#090d16',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--radius-md)',
+                            boxShadow: '0 12px 30px rgba(0,0,0,0.85)',
+                            padding: '8px',
+                            marginTop: '4px',
+                            animation: 'fadeIn 0.15s ease',
+                          }}
+                        >
+                          <div style={{ marginBottom: '6px' }}>
+                            <input
+                              type="text"
+                              autoFocus
+                              placeholder="🔍 Search country..."
+                              value={countrySearch}
+                              onChange={(e) => setCountrySearch(e.target.value)}
+                              className="input-field"
+                              style={{ padding: '8px 12px', fontSize: '0.84rem', width: '100%', background: '#0f172a' }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                            {COUNTRIES.filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase())).length === 0 ? (
+                              <div style={{ padding: '10px', fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                                No matching country
+                              </div>
+                            ) : (
+                              COUNTRIES.filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase())).map((c) => (
+                                <div
+                                  key={c}
+                                  onClick={() => {
+                                    handleInputChange('country', c);
+                                    setIsCountryOpen(false);
+                                    setCountrySearch('');
+                                  }}
+                                  style={{
+                                    padding: '8px 12px',
+                                    fontSize: '0.84rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    background: formData.country === c ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
+                                    color: formData.country === c ? '#c7d2fe' : 'var(--text-primary)',
+                                    fontWeight: formData.country === c ? 600 : 400,
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (formData.country !== c) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (formData.country !== c) e.currentTarget.style.background = 'transparent';
+                                  }}
+                                >
+                                  <span>{c}</span>
+                                  {formData.country === c && <span style={{ color: '#818cf8', fontSize: '0.8rem' }}>✓</span>}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : field.field_key === 'student_count' || field.field_key === 'student_strength' ? (
+                    <select
+                      value={formData[field.field_key] || ''}
+                      onChange={(e) => handleInputChange(field.field_key, e.target.value)}
+                      className="input-field"
+                      style={{ background: '#0f172a' }}
+                      required={field.is_required}
+                    >
+                      <option value="">Select Student Count / Capacity</option>
+                      {STUDENT_STRENGTH_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : field.field_type === 'select' ? (
                     <select
                       value={formData[field.field_key] || ''}
                       onChange={(e) => handleInputChange(field.field_key, e.target.value)}

@@ -69,7 +69,7 @@ export async function POST(
     try {
       await sql`
         INSERT INTO audit_logs (record_type, record_id, actor_id, actor_name, action, metadata)
-        VALUES ('lead', ${id}, ${user.id}, ${user.name}, 'lead_reassigned', ${JSON.stringify({
+        VALUES ('lead', ${id}, ${user.id}, ${user.name}, ${lead.manager_id ? 'lead_reassigned' : 'lead_assigned'}, ${JSON.stringify({
           lead_code: lead.lead_code,
           from_manager_id: lead.manager_id,
           to_manager: `${targetUser.name} (${targetUser.user_code})`,
@@ -81,7 +81,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: `Lead ${lead.lead_code} reassigned to ${targetUser.name} (${targetUser.user_code}).`,
+      message: `Lead ${lead.lead_code} ${lead.manager_id ? 'reassigned' : 'assigned'} to ${targetUser.name} (${targetUser.user_code}).`,
       lead: updateRes[0],
     });
   } catch (err: any) {

@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface User {
   id: string;
   user_code: string;
   name: string;
   email: string;
-  role: 'admin' | 'pre_sales' | 'referral' | 'business_relations';
+  role: 'admin' | 'pre_sales' | 'referral' | 'business_relations' | 'promoter';
+  commission_rate?: number | string | null;
   date_of_joining: string | null;
   description: string | null;
   is_active: boolean;
@@ -20,6 +22,7 @@ interface UserCounts {
   admin: number;
   pre_sales: number;
   referral: number;
+  promoter?: number;
   business_relations: number;
 }
 
@@ -37,16 +40,26 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
 
+  const ROLE_DEFAULT_RATES: Record<string, number> = {
+    promoter: 10,
+    pre_sales: 10,
+    referral: 20,
+    business_relations: 10,
+    admin: 0,
+  };
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [rateMode, setRateMode] = useState<'default' | 'custom'>('default');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     role: 'pre_sales',
-    date_of_joining: new Date().toISOString().split('T')[0],
+    date_of_joining: '',
     description: '',
+    commission_rate: '10',
   });
 
   // Action status message
@@ -129,9 +142,11 @@ export default function AdminUsersPage() {
         name: '',
         email: '',
         role: 'pre_sales',
-        date_of_joining: new Date().toISOString().split('T')[0],
+        date_of_joining: '',
         description: '',
+        commission_rate: '10',
       });
+      setRateMode('default');
       setToastMsg(`User ${data.user.user_code} successfully created!`);
       setTimeout(() => setToastMsg(''), 4000);
       fetchUsers();
@@ -145,6 +160,7 @@ export default function AdminUsersPage() {
   const rolePrefixMap: Record<string, string> = {
     pre_sales: 'PS',
     referral: 'REF',
+    promoter: 'PM',
     business_relations: 'BR',
     admin: 'ADM',
   };
@@ -237,6 +253,18 @@ export default function AdminUsersPage() {
           </div>
         </div>
 
+        <div className="glass-panel" style={{ padding: '20px', borderLeft: '3px solid var(--role-promoter-color)' }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--role-promoter-color)', textTransform: 'uppercase', marginBottom: '8px' }}>
+            Promoters
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff' }}>
+            {counts.promoter || 0}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Prefix: <span className="user-code-pill" style={{ color: 'var(--role-promoter-color)' }}>PM-</span>
+          </div>
+        </div>
+
         <div className="glass-panel" style={{ padding: '20px', borderLeft: '3px solid var(--role-business-color)' }}>
           <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--role-business-color)', textTransform: 'uppercase', marginBottom: '8px' }}>
             Business Relations
@@ -268,6 +296,7 @@ export default function AdminUsersPage() {
             { id: 'all', label: 'All Roles' },
             { id: 'pre_sales', label: 'Pre-Sales' },
             { id: 'referral', label: 'Referral' },
+            { id: 'promoter', label: 'Promoters' },
             { id: 'business_relations', label: 'Business Relations' },
             { id: 'admin', label: 'Admins' },
           ].map((tab) => {
@@ -357,14 +386,23 @@ export default function AdminUsersPage() {
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
                     <td style={{ padding: '16px 20px' }}>
-                      <span className="user-code-pill" style={{ color: '#ffffff' }}>
+                      <Link
+                        href={`/admin/users/${user.id}`}
+                        className="user-code-pill"
+                        style={{ color: '#ffffff', textDecoration: 'none', display: 'inline-block' }}
+                      >
                         {user.user_code}
-                      </span>
+                      </Link>
                     </td>
                     <td style={{ padding: '16px 20px' }}>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>
-                        {user.name}
-                      </div>
+                      <Link
+                        href={`/admin/users/${user.id}`}
+                        style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px', textDecoration: 'none', display: 'inline-block' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = '#818cf8')}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+                      >
+                        {user.name} ↗
+                      </Link>
                       <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
                         {user.email}
                       </div>
@@ -381,27 +419,41 @@ export default function AdminUsersPage() {
                       {user.description || <span style={{ opacity: 0.4 }}>—</span>}
                     </td>
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      <button
-                        onClick={() => setConfirmStatusUser(user)}
-                        title={user.is_active ? 'Click to deactivate access' : 'Click to reactivate access'}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '5px 12px',
-                          borderRadius: '9999px',
-                          fontSize: '0.78rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          background: user.is_active ? 'var(--success-bg)' : 'var(--danger-bg)',
-                          color: user.is_active ? '#34d399' : '#f87171',
-                          border: user.is_active ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
-                        <span style={{ fontSize: '0.65rem' }}>●</span>
-                        <span>{user.is_active ? 'Active' : 'Inactive'}</span>
-                      </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <Link
+                          href={`/admin/users/${user.id}`}
+                          className="btn-secondary"
+                          style={{
+                            padding: '5px 12px',
+                            fontSize: '0.78rem',
+                            textDecoration: 'none',
+                            borderRadius: 'var(--radius-md)',
+                          }}
+                        >
+                          Performance ↗
+                        </Link>
+                        <button
+                          onClick={() => setConfirmStatusUser(user)}
+                          title={user.is_active ? 'Click to deactivate access' : 'Click to reactivate access'}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '5px 12px',
+                            borderRadius: '9999px',
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            background: user.is_active ? 'var(--success-bg)' : 'var(--danger-bg)',
+                            color: user.is_active ? '#34d399' : '#f87171',
+                            border: user.is_active ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span style={{ fontSize: '0.65rem' }}>●</span>
+                          <span>{user.is_active ? 'Active' : 'Inactive'}</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -514,12 +566,20 @@ export default function AdminUsersPage() {
                   </label>
                   <select
                     value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                    onChange={(e) => {
+                      const newRole = e.target.value as any;
+                      setFormData({
+                        ...formData,
+                        role: newRole,
+                        commission_rate: rateMode === 'default' ? String(ROLE_DEFAULT_RATES[newRole] ?? 10) : formData.commission_rate,
+                      });
+                    }}
                     className="input-field"
                     style={{ background: '#0f172a' }}
                   >
                     <option value="pre_sales">Pre-Sales (PS)</option>
                     <option value="referral">Referral Partner (REF)</option>
+                    <option value="promoter">Promoter / Affiliate (PM)</option>
                     <option value="business_relations">Business Relations (BR)</option>
                     <option value="admin">Administrator (ADM)</option>
                   </select>
@@ -538,6 +598,88 @@ export default function AdminUsersPage() {
                   />
                 </div>
               </div>
+
+              {/* Incentive / Commission Rate Settings */}
+              {formData.role !== 'admin' && (
+                <div
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-subtle)',
+                    padding: '12px 14px',
+                    borderRadius: 'var(--radius-md)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#ffffff' }}>
+                      Incentive / Commission Rate (%)
+                    </label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRateMode('default');
+                          setFormData((prev) => ({
+                            ...prev,
+                            commission_rate: String(ROLE_DEFAULT_RATES[prev.role] ?? 10),
+                          }));
+                        }}
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid',
+                          borderColor: rateMode === 'default' ? '#6366f1' : 'var(--border-subtle)',
+                          background: rateMode === 'default' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                          color: rateMode === 'default' ? '#ffffff' : 'var(--text-muted)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Default ({ROLE_DEFAULT_RATES[formData.role]}%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRateMode('custom')}
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid',
+                          borderColor: rateMode === 'custom' ? '#6366f1' : 'var(--border-subtle)',
+                          background: rateMode === 'custom' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                          color: rateMode === 'custom' ? '#ffffff' : 'var(--text-muted)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Custom %
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="100"
+                      disabled={rateMode === 'default'}
+                      value={formData.commission_rate}
+                      onChange={(e) => setFormData({ ...formData, commission_rate: e.target.value })}
+                      className="input-field"
+                      style={{
+                        maxWidth: '120px',
+                        fontWeight: 700,
+                        color: '#34d399',
+                        opacity: rateMode === 'default' ? 0.8 : 1,
+                      }}
+                    />
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      % payout on verified cash collected from won deals
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Code Preview Callout */}
               <div

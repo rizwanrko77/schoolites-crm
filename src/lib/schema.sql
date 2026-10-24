@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
     user_code VARCHAR(32) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'pre_sales', 'referral', 'business_relations')),
+    role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'pre_sales', 'referral', 'business_relations', 'promoter')),
+    commission_rate NUMERIC(5, 2) DEFAULT 10.00,
     date_of_joining DATE,
     description TEXT,
     is_active BOOLEAN DEFAULT TRUE,
@@ -56,11 +57,12 @@ CREATE TABLE IF NOT EXISTS form_field_configs (
     UNIQUE(form_type, field_key)
 );
 
--- 6. Enquiries Table (Attributed to User Code / Owner)
+-- 6. Enquiries Table (Attributed to User Code / Owner / Promoter)
 CREATE TABLE IF NOT EXISTS enquiries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     enquiry_code VARCHAR(32) UNIQUE NOT NULL,
     owner_id UUID NOT NULL REFERENCES users(id),
+    promoter_id UUID REFERENCES users(id),
     spoc_name VARCHAR(255) NOT NULL,
     phone VARCHAR(50) NOT NULL,
     email VARCHAR(255),
@@ -77,6 +79,7 @@ CREATE TABLE IF NOT EXISTS enquiries (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_enquiries_owner ON enquiries(owner_id);
+CREATE INDEX IF NOT EXISTS idx_enquiries_promoter ON enquiries(promoter_id);
 CREATE INDEX IF NOT EXISTS idx_enquiries_phone ON enquiries(phone);
 
 -- 7. Leads Table (Core Pipeline)
@@ -84,6 +87,7 @@ CREATE TABLE IF NOT EXISTS leads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     lead_code VARCHAR(32) UNIQUE NOT NULL,
     owner_id UUID NOT NULL REFERENCES users(id),
+    promoter_id UUID REFERENCES users(id),
     manager_id UUID REFERENCES users(id),
     source_enquiry_id UUID REFERENCES enquiries(id),
     
@@ -124,7 +128,7 @@ CREATE TABLE IF NOT EXISTS leads (
     additional_details TEXT,
     
     -- Status & Valuation
-    status VARCHAR(50) DEFAULT 'unassigned' CHECK (status IN ('unassigned', 'assigned', 'in_discussion', 'proposal_sent', 'won', 'lost')),
+    status VARCHAR(50) DEFAULT 'unassigned' CHECK (status IN ('unassigned', 'assigned', 'demo_scheduled', 'demo_completed', 'in_discussion', 'following_up', 'proposal_sent', 'onboarding_initiated', 'onboarding_completed', 'won', 'lost')),
     deal_value NUMERIC(14, 2) DEFAULT 0.00,
     
     -- Duplicate Detection Flagging
@@ -170,7 +174,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_record ON audit_logs(record_type, reco
 -- 10. Incentive & Commission Configurations
 CREATE TABLE IF NOT EXISTS incentive_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    role VARCHAR(50) UNIQUE NOT NULL CHECK (role IN ('pre_sales', 'referral', 'business_relations')),
+    role VARCHAR(50) UNIQUE NOT NULL CHECK (role IN ('pre_sales', 'referral', 'business_relations', 'promoter')),
     default_rate_percent NUMERIC(5, 2) NOT NULL,
     description TEXT,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -181,7 +185,7 @@ CREATE TABLE IF NOT EXISTS payout_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id),
     lead_id UUID REFERENCES leads(id),
-    role_type VARCHAR(50) NOT NULL CHECK (role_type IN ('pre_sales', 'referral', 'business_relations')),
+    role_type VARCHAR(50) NOT NULL CHECK (role_type IN ('pre_sales', 'referral', 'business_relations', 'promoter')),
     payout_type VARCHAR(50) NOT NULL CHECK (payout_type IN ('incentive', 'commission')),
     amount NUMERIC(14, 2) NOT NULL,
     status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'paid')),
@@ -238,3 +242,45 @@ CREATE TABLE IF NOT EXISTS db_pipeline_requests (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     fulfilled_at TIMESTAMP WITH TIME ZONE
 );
+
+-- 14. Lead Contracts (Client Accounts)
+CREATE TABLE IF NOT EXISTS lead_contracts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_id UUID UNIQUE NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    contract_amount NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+    duration_months INT DEFAULT 12,
+    start_date DATE,
+    end_date DATE,
+    status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'completed', 'terminated', 'renewed')),
+    notes TEXT,
+    promoter_rate NUMERIC(5, 2),
+    owner_rate NUMERIC(5, 2),
+    manager_rate NUMERIC(5, 2),
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_lead_contracts_lead ON lead_contracts(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_contracts_status ON lead_contracts(status);
+
+-- 15. Contract Invoices (Milestone & Partial Payments)
+CREATE TABLE IF NOT EXISTS contract_invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    contract_id UUID NOT NULL REFERENCES lead_contracts(id) ON DELETE CASCADE,
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    invoice_number VARCHAR(100),
+    amount NUMERIC(14, 2) NOT NULL,
+    raise_date DATE DEFAULT CURRENT_DATE,
+    due_date DATE,
+    status VARCHAR(50) NOT NULL DEFAULT 'raised' CHECK (status IN ('raised', 'pending', 'cleared', 'cancelled')),
+    cleared_at TIMESTAMP WITH TIME ZONE,
+    payment_method VARCHAR(100),
+    payment_reference VARCHAR(100),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_contract_invoices_contract ON contract_invoices(contract_id);
+CREATE INDEX IF NOT EXISTS idx_contract_invoices_lead ON contract_invoices(lead_id);
+CREATE INDEX IF NOT EXISTS idx_contract_invoices_status ON contract_invoices(status);
+

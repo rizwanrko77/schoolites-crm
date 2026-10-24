@@ -65,11 +65,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   const navItems: NavItem[] = [
-    { id: 'users', label: 'Team Users', href: '/admin/users', icon: '👥', badge: 'Core', isActive: pathname.startsWith('/admin/users') },
+    { id: 'users', label: 'All Users', href: '/admin/users', icon: '👥', badge: 'Core', isActive: pathname.startsWith('/admin/users') },
+    { id: 'enquiries', label: 'All Enquiries', href: '/admin/enquiries', icon: '📥', badge: 'Inbound', isActive: pathname.startsWith('/admin/enquiries') },
+    { id: 'leads', label: 'All Leads', href: '/admin/leads', icon: '🎯', badge: 'Phase 4', isActive: pathname.startsWith('/admin/leads') },
     { id: 'forms', label: 'Form Builder', href: '/admin/forms', icon: '📝', badge: 'V1', isActive: pathname.startsWith('/admin/forms') },
-    { id: 'leads', label: 'All Leads & Pool', href: '/admin/leads', icon: '🎯', badge: 'Phase 4', isActive: pathname.startsWith('/admin/leads') },
-    { id: 'database', label: 'Places DB Pipeline', href: '/admin/database', icon: '🏢', badge: 'Phase 5', isActive: pathname.startsWith('/admin/database') },
-    { id: 'incentives', label: 'Incentives & Payouts', href: '/admin/incentives', icon: '💰', badge: 'Phase 6', isActive: pathname.startsWith('/admin/incentives') },
+    { id: 'database', label: 'Places DB', href: '/admin/database', icon: '🏢', badge: 'Phase 5', isActive: pathname.startsWith('/admin/database') },
+    { id: 'business', label: 'Business & Payouts', href: '/admin/business', icon: '💼', badge: 'Active', isActive: pathname.startsWith('/admin/business') || pathname.startsWith('/admin/incentives') },
     { id: 'assets', label: 'Assets Hub', href: '/admin/assets', icon: '📁', badge: 'Phase 3', isActive: pathname.startsWith('/admin/assets') },
     { id: 'logs', label: 'Audit Logs', href: '/admin/logs', icon: '📜', badge: 'Security', isActive: pathname.startsWith('/admin/logs') },
   ];

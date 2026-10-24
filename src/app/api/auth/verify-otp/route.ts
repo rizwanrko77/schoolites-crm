@@ -46,6 +46,9 @@ export async function POST(req: NextRequest) {
       case 'referral':
         redirectUrl = '/referral';
         break;
+      case 'promoter':
+        redirectUrl = '/promoter';
+        break;
       case 'business_relations':
         redirectUrl = '/business';
         break;

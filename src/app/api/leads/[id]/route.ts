@@ -37,6 +37,11 @@ export async function GET(
     const lead = leadRes[0];
 
     // Role-based view protection:
+    // Promoters are restricted from accessing deep lead contact info
+    if (user.role === 'promoter') {
+      return NextResponse.json({ error: 'Access denied: Promoters can only track high-level pipeline status.' }, { status: 403 });
+    }
+
     // Pre-Sales and Referral partners can only see leads they created
     if ((user.role === 'pre_sales' || user.role === 'referral') && lead.owner_id !== user.id) {
       return NextResponse.json({ error: 'Unauthorized to view this lead.' }, { status: 403 });
@@ -88,7 +93,30 @@ export async function GET(
       ORDER BY created_at DESC
     `;
 
-    return NextResponse.json({ lead, notes, audit_logs: auditLogs });
+    // Fetch contract and invoices (Admin and Business Relations only)
+    let contract = null;
+    let invoices: any[] = [];
+
+    if (user.role === 'admin' || user.role === 'business_relations') {
+      const contractRes = await sql`
+        SELECT c.*, u.name as created_by_name, u.user_code as created_by_code
+        FROM lead_contracts c
+        LEFT JOIN users u ON c.created_by = u.id
+        WHERE c.lead_id = ${id}
+        LIMIT 1
+      `;
+      if (contractRes.length > 0) {
+        contract = contractRes[0];
+        invoices = await sql`
+          SELECT *
+          FROM contract_invoices
+          WHERE contract_id = ${contract.id}
+          ORDER BY COALESCE(raise_date, due_date) ASC, created_at ASC
+        `;
+      }
+    }
+
+    return NextResponse.json({ lead, notes, audit_logs: auditLogs, contract, invoices });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to fetch lead details' }, { status: 500 });
   }
@@ -138,6 +166,7 @@ export async function PATCH(
     // Extract updatable fields
     const {
       status,
+      manager_id,
       institute_name,
       institute_type,
       country,
@@ -165,6 +194,52 @@ export async function PATCH(
       expected_start_date,
       additional_details,
     } = body;
+
+    // 4. Lead Manager Synchronization & Assignment Rules:
+    let targetManagerId = existing.manager_id;
+    let isManagerChanged = false;
+    let targetManagerUser: any = null;
+
+    if (status === 'unassigned') {
+      // Rule A: Transitioning to 'unassigned' always resets manager to NULL
+      targetManagerId = null;
+      if (existing.manager_id !== null) {
+        isManagerChanged = true;
+      }
+    } else if (manager_id !== undefined) {
+      // Rule B: Explicit manager assignment / reassignment
+      if (user.role !== 'admin' && existing.manager_id !== user.id) {
+        return NextResponse.json({ error: 'Only an Administrator or the assigned Lead Manager can assign or reassign this lead.' }, { status: 403 });
+      }
+
+      if (manager_id === null || manager_id === '') {
+        targetManagerId = null;
+        if (existing.manager_id !== null) {
+          isManagerChanged = true;
+        }
+      } else {
+        const mgrCheck = await sql`
+          SELECT id, name, user_code, role, is_active
+          FROM users
+          WHERE id = ${manager_id} AND is_active = TRUE
+          LIMIT 1
+        `;
+        if (mgrCheck.length === 0) {
+          return NextResponse.json({ error: 'Selected lead manager not found or inactive.' }, { status: 400 });
+        }
+        if (mgrCheck[0].role !== 'business_relations') {
+          return NextResponse.json({ error: 'Leads can only be assigned to members of the Business Relations team.' }, { status: 400 });
+        }
+        targetManagerUser = mgrCheck[0];
+        targetManagerId = targetManagerUser.id;
+        if (existing.manager_id !== targetManagerId) {
+          isManagerChanged = true;
+        }
+      }
+    } else if ((existing.status === 'unassigned' || !existing.manager_id) && status && status !== 'unassigned') {
+      // Rule C: Prevent moving a lead out of unassigned without assigning a manager
+      return NextResponse.json({ error: 'A Lead Manager must be assigned when moving a lead out of the Unassigned pool.' }, { status: 400 });
+    }
 
     // Detect field diffs for granular audit logging
     const diffs: Record<string, { from: any; to: any }> = {};
@@ -203,6 +278,29 @@ export async function PATCH(
     // Clean phone number if updated
     const cleanSpocPhone = spoc_phone ? String(spoc_phone).replace(/[^0-9]/g, '') : existing.spoc_phone;
 
+    // Resolve Decision Maker details if same_as_spoc is true
+    const resolvedDmSameAsSpoc = dm_same_as_spoc !== undefined ? Boolean(dm_same_as_spoc) : Boolean(existing.dm_same_as_spoc);
+    const finalDmName = resolvedDmSameAsSpoc
+      ? (spoc_name !== undefined && spoc_name !== '' ? spoc_name : existing.spoc_name)
+      : (dm_name !== undefined ? dm_name : existing.dm_name);
+    const finalDmRole = resolvedDmSameAsSpoc
+      ? (spoc_role !== undefined && spoc_role !== '' ? spoc_role : existing.spoc_role)
+      : (dm_role !== undefined ? dm_role : existing.dm_role);
+    const finalDmPhone = resolvedDmSameAsSpoc
+      ? cleanSpocPhone
+      : (dm_phone !== undefined ? String(dm_phone).replace(/[^0-9]/g, '') : existing.dm_phone);
+    const finalDmEmail = resolvedDmSameAsSpoc
+      ? (spoc_email !== undefined ? spoc_email : existing.spoc_email)
+      : (dm_email !== undefined ? dm_email : existing.dm_email);
+
+    // Normalize enum fields to match database check constraints
+    const rawErp = current_erp !== undefined ? String(current_erp).toLowerCase().trim() : undefined;
+    const finalCurrentErp = rawErp ? (['yes', 'no', 'unsure'].includes(rawErp) ? rawErp : 'unsure') : undefined;
+
+    const rawMode = preferred_slot_mode !== undefined ? String(preferred_slot_mode).trim() : undefined;
+    const validModes = ['Phone/WhatsApp Call', 'Virtual Meet', 'Unsure', 'Call', 'Meeting', 'Other'];
+    const finalSlotMode = rawMode !== undefined ? (validModes.includes(rawMode) ? rawMode : null) : undefined;
+
     // Check duplicate if SPOC phone or email was changed
     let isDuplicate = existing.is_duplicate;
     let duplicateOfLeadId = existing.duplicate_of_lead_id;
@@ -224,22 +322,23 @@ export async function PATCH(
       UPDATE leads
       SET 
         status = COALESCE(${status ?? null}, status),
+        manager_id = ${targetManagerId},
         institute_name = COALESCE(${institute_name ?? null}, institute_name),
         institute_type = COALESCE(${institute_type ?? null}, institute_type),
         country = COALESCE(${country ?? null}, country),
         city = COALESCE(${city ?? null}, city),
         student_strength = COALESCE(${student_strength ?? null}, student_strength),
-        current_erp = COALESCE(${current_erp ?? null}, current_erp),
+        current_erp = COALESCE(${finalCurrentErp ?? null}, current_erp),
         current_erp_name = COALESCE(${current_erp_name ?? null}, current_erp_name),
         spoc_name = COALESCE(${spoc_name ?? null}, spoc_name),
         spoc_role = COALESCE(${spoc_role ?? null}, spoc_role),
         spoc_phone = COALESCE(${cleanSpocPhone ?? null}, spoc_phone),
         spoc_email = COALESCE(${spoc_email ?? null}, spoc_email),
-        dm_same_as_spoc = COALESCE(${dm_same_as_spoc ?? null}, dm_same_as_spoc),
-        dm_name = COALESCE(${dm_name ?? null}, dm_name),
-        dm_role = COALESCE(${dm_role ?? null}, dm_role),
-        dm_phone = COALESCE(${dm_phone ?? null}, dm_phone),
-        dm_email = COALESCE(${dm_email ?? null}, dm_email),
+        dm_same_as_spoc = ${resolvedDmSameAsSpoc},
+        dm_name = COALESCE(${finalDmName ?? null}, dm_name),
+        dm_role = COALESCE(${finalDmRole ?? null}, dm_role),
+        dm_phone = COALESCE(${finalDmPhone ?? null}, dm_phone),
+        dm_email = COALESCE(${finalDmEmail ?? null}, dm_email),
         additional_contact_name = COALESCE(${additional_contact_name ?? null}, additional_contact_name),
         additional_contact_role = COALESCE(${additional_contact_role ?? null}, additional_contact_role),
         additional_contact_phone = COALESCE(${additional_contact_phone ?? null}, additional_contact_phone),
@@ -247,7 +346,7 @@ export async function PATCH(
         decision_flow = COALESCE(${decision_flow ?? null}, decision_flow),
         preferred_slot_date = COALESCE(${preferred_slot_date ?? null}, preferred_slot_date),
         preferred_slot_time = COALESCE(${preferred_slot_time ?? null}, preferred_slot_time),
-        preferred_slot_mode = COALESCE(${preferred_slot_mode ?? null}, preferred_slot_mode),
+        preferred_slot_mode = COALESCE(${finalSlotMode ?? null}, preferred_slot_mode),
         expected_start_date = COALESCE(${expected_start_date ?? null}, expected_start_date),
         additional_details = COALESCE(${additional_details ?? null}, additional_details),
         is_duplicate = ${isDuplicate},
@@ -270,6 +369,33 @@ export async function PATCH(
         `;
       } catch (auditErr) {
         console.warn('Failed to write audit log for status change:', auditErr);
+      }
+    }
+
+    // Audit Log for manager assignment / unassignment / reassignment
+    if (isManagerChanged) {
+      try {
+        const action = targetManagerId === null
+          ? 'lead_unassigned'
+          : existing.manager_id === null
+          ? 'lead_assigned'
+          : 'lead_reassigned';
+
+        const metadata: any = {
+          lead_code: existing.lead_code,
+          from_manager_id: existing.manager_id,
+        };
+        if (targetManagerUser) {
+          metadata.to_manager = `${targetManagerUser.name} (${targetManagerUser.user_code})`;
+          metadata.to_manager_id = targetManagerUser.id;
+        }
+
+        await sql`
+          INSERT INTO audit_logs (record_type, record_id, actor_id, actor_name, action, metadata)
+          VALUES ('lead', ${id}, ${user.id}, ${user.name}, ${action}, ${JSON.stringify(metadata)})
+        `;
+      } catch (auditErr) {
+        console.warn('Failed to write audit log for manager change:', auditErr);
       }
     }
 

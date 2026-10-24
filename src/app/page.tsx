@@ -24,6 +24,9 @@ export default function HomePage() {
           case 'referral':
             router.replace('/referral');
             break;
+          case 'promoter':
+            router.replace('/promoter');
+            break;
           case 'business_relations':
             router.replace('/business');
             break;

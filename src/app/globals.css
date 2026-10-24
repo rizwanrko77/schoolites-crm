@@ -39,6 +39,10 @@
   --role-business-bg: rgba(251, 191, 36, 0.12);
   --role-business-border: rgba(251, 191, 36, 0.3);
 
+  --role-promoter-color: #f43f5e;
+  --role-promoter-bg: rgba(244, 63, 94, 0.12);
+  --role-promoter-border: rgba(244, 63, 94, 0.3);
+
   /* State Colors */
   --success: #10b981;
   --success-bg: rgba(16, 185, 129, 0.12);
@@ -160,6 +164,12 @@ button {
   color: var(--role-business-color);
   background: var(--role-business-bg);
   border-color: var(--role-business-border);
+}
+
+.badge-role.promoter {
+  color: var(--role-promoter-color);
+  background: var(--role-promoter-bg);
+  border-color: var(--role-promoter-border);
 }
 
 /* User Code Pill */

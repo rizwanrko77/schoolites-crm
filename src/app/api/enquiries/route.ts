@@ -12,26 +12,106 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const statusFilter = searchParams.get('status');
+    const view = searchParams.get('view'); // 'promoter_pool', 'my', etc.
+    const actorUserId = searchParams.get('user_id');
 
     let enquiries;
     if (user.role === 'admin') {
-      enquiries = await sql`
-        SELECT e.id, e.enquiry_code, e.owner_id, e.spoc_name, e.phone, e.email, e.institute_type, 
+      if (actorUserId) {
+        enquiries = await sql`
+          SELECT e.id, e.enquiry_code, e.owner_id, e.promoter_id, e.spoc_name, e.phone, e.email, e.institute_type, 
+                 e.institute_name, e.country, e.city, e.student_count, e.website, e.message, 
+                 e.status, e.converted_lead_id, e.created_at, e.internal_notes, e.claimed_at,
+                 u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+                 u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+                 l.lead_code, l.status as lead_status, l.deal_value as lead_deal_value,
+                 u_mgr.name as manager_name, u_mgr.user_code as manager_code
+          FROM enquiries e
+          LEFT JOIN users u_owner ON e.owner_id = u_owner.id
+          LEFT JOIN users u_prom ON e.promoter_id = u_prom.id
+          LEFT JOIN leads l ON e.converted_lead_id = l.id
+          LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+          WHERE e.promoter_id = ${actorUserId} OR e.owner_id = ${actorUserId}
+          ORDER BY e.created_at DESC
+        `;
+      } else {
+        enquiries = await sql`
+          SELECT e.id, e.enquiry_code, e.owner_id, e.promoter_id, e.spoc_name, e.phone, e.email, e.institute_type, 
+                 e.institute_name, e.country, e.city, e.student_count, e.website, e.message, 
+                 e.status, e.converted_lead_id, e.created_at, e.internal_notes, e.claimed_at,
+                 u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+                 u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+                 l.lead_code, l.status as lead_status, l.deal_value as lead_deal_value,
+                 u_mgr.name as manager_name, u_mgr.user_code as manager_code
+          FROM enquiries e
+          LEFT JOIN users u_owner ON e.owner_id = u_owner.id
+          LEFT JOIN users u_prom ON e.promoter_id = u_prom.id
+          LEFT JOIN leads l ON e.converted_lead_id = l.id
+          LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+          ORDER BY e.created_at DESC
+        `;
+      }
+    } else if (user.role === 'promoter') {
+      // Promoter sees only their enquiries with live lead status and cross-actor team (internal_notes kept private)
+      const rawEnquiries = await sql`
+        SELECT e.id, e.enquiry_code, e.owner_id, e.promoter_id, e.spoc_name, e.phone, e.email, e.institute_type, 
                e.institute_name, e.country, e.city, e.student_count, e.website, e.message, 
-               e.status, e.converted_lead_id, e.created_at,
-               u.name as owner_name, u.user_code as owner_code, u.role as owner_role
+               e.status, e.converted_lead_id, e.created_at, e.claimed_at,
+               u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+               u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+               l.lead_code, l.status as lead_status, l.deal_value as lead_deal_value,
+               u_mgr.name as manager_name, u_mgr.user_code as manager_code
         FROM enquiries e
-        JOIN users u ON e.owner_id = u.id
+        LEFT JOIN users u_owner ON e.owner_id = u_owner.id
+        LEFT JOIN users u_prom ON e.promoter_id = u_prom.id
+        LEFT JOIN leads l ON e.converted_lead_id = l.id
+        LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+        WHERE e.promoter_id = ${user.id} OR e.owner_id = ${user.id}
+        ORDER BY e.created_at DESC
+      `;
+
+      enquiries = rawEnquiries.map((e: any) => ({
+        ...e,
+        // Mask phone & email for promoter view
+        phone: e.phone ? `${e.phone.slice(0, 3)}*****${e.phone.slice(-2)}` : '—',
+        email: e.email ? e.email.replace(/(?<=^.).(?=.*@)/g, '*') : null,
+      }));
+    } else if ((user.role === 'pre_sales' || user.role === 'business_relations') && view === 'promoter_pool') {
+      // Pre-Sales & BR team viewing the unclaimed shared Promoter Enquiries pool
+      enquiries = await sql`
+        SELECT e.id, e.enquiry_code, e.owner_id, e.promoter_id, e.spoc_name, e.phone, e.email, e.institute_type, 
+               e.institute_name, e.country, e.city, e.student_count, e.website, e.message, 
+               e.status, e.converted_lead_id, e.created_at, e.internal_notes, e.claimed_at,
+               u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+               u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+               l.lead_code, l.status as lead_status, l.deal_value as lead_deal_value,
+               u_mgr.name as manager_name, u_mgr.user_code as manager_code
+        FROM enquiries e
+        LEFT JOIN users u_owner ON e.owner_id = u_owner.id
+        LEFT JOIN users u_prom ON e.promoter_id = u_prom.id
+        LEFT JOIN leads l ON e.converted_lead_id = l.id
+        LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+        WHERE e.promoter_id IS NOT NULL 
+          AND (e.claimed_at IS NULL OR e.owner_id = e.promoter_id)
+          AND e.status != 'discarded' 
+          AND e.status != 'converted_to_lead'
         ORDER BY e.created_at DESC
       `;
     } else {
+      // My direct and grabbed enquiries
       enquiries = await sql`
-        SELECT e.id, e.enquiry_code, e.owner_id, e.spoc_name, e.phone, e.email, e.institute_type, 
+        SELECT e.id, e.enquiry_code, e.owner_id, e.promoter_id, e.spoc_name, e.phone, e.email, e.institute_type, 
                e.institute_name, e.country, e.city, e.student_count, e.website, e.message, 
-               e.status, e.converted_lead_id, e.created_at,
-               u.name as owner_name, u.user_code as owner_code, u.role as owner_role
+               e.status, e.converted_lead_id, e.created_at, e.internal_notes, e.claimed_at,
+               u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+               u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+               l.lead_code, l.status as lead_status, l.deal_value as lead_deal_value,
+               u_mgr.name as manager_name, u_mgr.user_code as manager_code
         FROM enquiries e
-        JOIN users u ON e.owner_id = u.id
+        LEFT JOIN users u_owner ON e.owner_id = u_owner.id
+        LEFT JOIN users u_prom ON e.promoter_id = u_prom.id
+        LEFT JOIN leads l ON e.converted_lead_id = l.id
+        LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
         WHERE e.owner_id = ${user.id}
         ORDER BY e.created_at DESC
       `;
@@ -110,14 +190,16 @@ export async function POST(req: NextRequest) {
     const enquiryCode = `ENQ-${seqRes[0].seq}`;
 
     // 6. Insert enquiry into database
+    const promoterId = owner.role === 'promoter' ? owner.id : null;
     const insertRes = await sql`
       INSERT INTO enquiries (
-        enquiry_code, owner_id, spoc_name, phone, email, 
+        enquiry_code, owner_id, promoter_id, spoc_name, phone, email, 
         institute_type, institute_name, country, city, student_count, 
         website, message, status, custom_data
       ) VALUES (
         ${enquiryCode},
         ${owner.id},
+        ${promoterId},
         ${form_data.name?.trim() || 'Anonymous Contact'},
         ${String(form_data.phone || '').trim()},
         ${form_data.email?.trim() || null},

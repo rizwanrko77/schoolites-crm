@@ -7,7 +7,8 @@ export interface UserSession {
   user_code: string;
   name: string;
   email: string;
-  role: 'admin' | 'pre_sales' | 'referral' | 'business_relations';
+  role: 'admin' | 'pre_sales' | 'referral' | 'business_relations' | 'promoter';
+  commission_rate?: number | string | null;
   date_of_joining: string | null;
   description: string | null;
   is_active: boolean;
@@ -90,7 +91,7 @@ export async function verifyOtpAndGetUser(email: string, code: string): Promise<
 
   // Fetch user
   const userRes = await sql`
-    SELECT id, user_code, name, email, role, date_of_joining, description, is_active
+    SELECT id, user_code, name, email, role, commission_rate, date_of_joining, description, is_active
     FROM users
     WHERE LOWER(email) = ${normalizedEmail}
     LIMIT 1
@@ -161,7 +162,7 @@ export async function getSessionUser(): Promise<UserSession | null> {
 
   try {
     const res = await sql`
-      SELECT u.id, u.user_code, u.name, u.email, u.role, u.date_of_joining, u.description, u.is_active
+      SELECT u.id, u.user_code, u.name, u.email, u.role, u.commission_rate, u.date_of_joining, u.description, u.is_active
       FROM sessions s
       JOIN users u ON s.user_id = u.id
       WHERE s.token = ${token}

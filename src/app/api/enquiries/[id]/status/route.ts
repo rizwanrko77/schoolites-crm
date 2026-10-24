@@ -16,17 +16,27 @@ export async function PATCH(
     const body = await req.json();
     const { status } = body;
 
-    const validStatuses = ['new', 'contacted', 'converted_to_lead', 'discarded'];
+    const validStatuses = ['new', 'contacted', 'in_discussion', 'converted_to_lead', 'discarded'];
     if (!validStatuses.includes(status)) {
       return NextResponse.json({ error: 'Invalid status value.' }, { status: 400 });
     }
 
-    // Verify ownership or admin
+    // Verify permissions:
+    // Admin, or owner of the enquiry, or Pre-Sales/BR team working on promoter pool enquiries
     let checkQuery;
     if (user.role === 'admin') {
       checkQuery = await sql`SELECT id, enquiry_code, status FROM enquiries WHERE id = ${id} LIMIT 1`;
-    } else {
+    } else if (user.role === 'pre_sales' || user.role === 'business_relations') {
+      checkQuery = await sql`
+        SELECT id, enquiry_code, status 
+        FROM enquiries 
+        WHERE id = ${id} AND (owner_id = ${user.id} OR promoter_id IS NOT NULL) 
+        LIMIT 1
+      `;
+    } else if (user.role === 'referral') {
       checkQuery = await sql`SELECT id, enquiry_code, status FROM enquiries WHERE id = ${id} AND owner_id = ${user.id} LIMIT 1`;
+    } else {
+      return NextResponse.json({ error: 'Unauthorized: Promoters cannot update enquiry statuses.' }, { status: 403 });
     }
 
     if (checkQuery.length === 0) {

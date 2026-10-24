@@ -7,7 +7,9 @@ import LeadDetailModal from '@/components/LeadDetailModal';
 import LeadTableControls from '@/components/LeadTableControls';
 import ActorShell, { NavItem } from '@/components/ActorShell';
 import { formatSlotDate, formatSlotTime, getSlotModeIcon } from '@/lib/slotFormat';
-import { LEAD_STATUSES, getStatusMeta } from '@/lib/leadStatuses';
+import { LEAD_STATUSES, getStatusMeta, ALL_STATUS_IDS } from '@/lib/leadStatuses';
+import { usePipelineAutoSync } from '@/hooks/usePipelineAutoSync';
+import ActorBusinessLedger from '@/components/ActorBusinessLedger';
 
 interface Lead {
   id: string;
@@ -71,47 +73,54 @@ interface Asset {
   created_at: string;
 }
 
-type TabType = 'unassigned' | 'my' | 'all' | 'created_by_me' | 'enquiries' | 'assets';
+type TabType = 'unassigned' | 'my' | 'all' | 'created_by_me' | 'enquiries' | 'assets' | 'business';
 
 export default function BusinessRelationsPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>('unassigned');
+  const [activeTab, setActiveTabState] = useState<TabType>('unassigned');
+
+  const setActiveTab = (tab: TabType) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState(null, '', url.toString());
+    }
+  };
   
   // Search, Status Filter & Sorting State with sessionStorage persistence
-  const [search, setSearch] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('br_leads_search');
-        if (saved) return saved;
-      } catch {}
-    }
-    return '';
-  });
-
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('br_leads_statuses');
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return [];
-  });
-
-  const [sortBy, setSortBy] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('br_leads_sort');
-        if (saved) return saved;
-      } catch {}
-    }
-    return 'created_desc';
-  });
-
+  const [search, setSearch] = useState('');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(ALL_STATUS_IDS);
+  const [sortBy, setSortBy] = useState<string>('created_desc');
   const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
   const [toastMsg, setToastMsg] = useState('');
+
+  // Hydrate URL tab and saved filters safely on mount after initial render
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const paramTab = new URLSearchParams(window.location.search).get('tab') as TabType;
+    const validTabs: TabType[] = ['unassigned', 'my', 'all', 'created_by_me', 'enquiries', 'assets', 'business'];
+    if (paramTab && validTabs.includes(paramTab)) {
+      setActiveTabState(paramTab);
+    }
+
+    try {
+      const savedSearch = sessionStorage.getItem('br_leads_search');
+      if (savedSearch) setSearch(savedSearch);
+
+      const savedStatuses = sessionStorage.getItem('br_leads_statuses');
+      if (savedStatuses) {
+        const parsed = JSON.parse(savedStatuses);
+        if (Array.isArray(parsed) && parsed.length > 0) setSelectedStatuses(parsed);
+      }
+
+      const savedSort = sessionStorage.getItem('br_leads_sort');
+      if (savedSort) setSortBy(savedSort);
+    } catch {}
+  }, []);
 
   // Leads Data
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -119,6 +128,8 @@ export default function BusinessRelationsPage() {
 
   // Enquiries Data
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
+  const [promoterEnquiries, setPromoterEnquiries] = useState<any[]>([]);
+  const [enquirySubTab, setEnquirySubTab] = useState<'my' | 'promoter_pool'>('my');
   const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null);
   const [enquiryToConvert, setEnquiryToConvert] = useState<Enquiry | null>(null);
 
@@ -155,10 +166,18 @@ export default function BusinessRelationsPage() {
       const isLeadTab = ['unassigned', 'my', 'all', 'created_by_me'].includes(activeTab);
       if (isLeadTab) setLoading(true);
 
+      if (selectedStatuses.length === 0) {
+        setLeads([]);
+        setLoading(false);
+        return;
+      }
+
       const params = new URLSearchParams();
       const viewParam = isLeadTab ? activeTab : 'my';
       params.append('view', viewParam);
-      if (selectedStatuses.length > 0) params.append('statuses', selectedStatuses.join(','));
+      if (selectedStatuses.length < ALL_STATUS_IDS.length) {
+        params.append('statuses', selectedStatuses.join(','));
+      }
       params.append('sort_by', sortBy);
       if (search.trim()) params.append('search', search.trim());
 
@@ -173,6 +192,14 @@ export default function BusinessRelationsPage() {
       setLoading(false);
     }
   };
+
+  usePipelineAutoSync(() => {
+    fetchLeads();
+    if (activeTab === 'enquiries') {
+      fetchEnquiries();
+      fetchPromoterEnquiries();
+    }
+  });
 
   // Column Header Sorting
   const sortedLeads = useMemo(() => {
@@ -206,7 +233,7 @@ export default function BusinessRelationsPage() {
 
   const handleClearAll = () => {
     setSearch('');
-    setSelectedStatuses([]);
+    setSelectedStatuses(ALL_STATUS_IDS);
     setSortBy('created_desc');
     setColumnSort(null);
   };
@@ -221,6 +248,18 @@ export default function BusinessRelationsPage() {
       }
     } catch (err) {
       console.error('Failed to fetch enquiries', err);
+    }
+  };
+
+  const fetchPromoterEnquiries = async () => {
+    try {
+      const res = await fetch('/api/enquiries?view=promoter_pool');
+      if (res.ok) {
+        const data = await res.json();
+        setPromoterEnquiries(data.enquiries || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch promoter pool enquiries', err);
     }
   };
 
@@ -248,6 +287,7 @@ export default function BusinessRelationsPage() {
         }
         setUser(data.user);
         fetchEnquiries();
+        fetchPromoterEnquiries();
         fetchAssets();
       })
       .catch(() => router.push('/login'));
@@ -314,6 +354,7 @@ export default function BusinessRelationsPage() {
     setTimeout(() => setToastMsg(''), 5000);
     fetchLeads();
     fetchEnquiries();
+    fetchPromoterEnquiries();
     setEnquiryToConvert(null);
   };
 
@@ -328,6 +369,7 @@ export default function BusinessRelationsPage() {
         setToastMsg(`Enquiry marked as ${newStatus}.`);
         setTimeout(() => setToastMsg(''), 3000);
         fetchEnquiries();
+        fetchPromoterEnquiries();
         if (selectedEnquiry && selectedEnquiry.id === enquiryId) {
           setSelectedEnquiry({ ...selectedEnquiry, status: newStatus as any });
         }
@@ -399,7 +441,7 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'unassigned',
       onClick: () => {
         setActiveTab('unassigned');
-        setSelectedStatuses([]);
+        setSelectedStatuses(ALL_STATUS_IDS);
       },
     },
     {
@@ -411,7 +453,7 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'my',
       onClick: () => {
         setActiveTab('my');
-        setSelectedStatuses([]);
+        setSelectedStatuses(ALL_STATUS_IDS);
       },
     },
     {
@@ -422,7 +464,7 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'all',
       onClick: () => {
         setActiveTab('all');
-        setSelectedStatuses([]);
+        setSelectedStatuses(ALL_STATUS_IDS);
       },
     },
 
@@ -436,7 +478,7 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'created_by_me',
       onClick: () => {
         setActiveTab('created_by_me');
-        setSelectedStatuses([]);
+        setSelectedStatuses(ALL_STATUS_IDS);
       },
     },
     {
@@ -457,6 +499,14 @@ export default function BusinessRelationsPage() {
       isActive: activeTab === 'assets',
       onClick: () => setActiveTab('assets'),
     },
+    {
+      id: 'business',
+      section: 'My Direct Sourcing',
+      label: 'Business & Rewards',
+      icon: '💼',
+      isActive: activeTab === 'business',
+      onClick: () => setActiveTab('business'),
+    },
   ];
 
   const activeTabLabels: Record<TabType, string> = {
@@ -466,6 +516,7 @@ export default function BusinessRelationsPage() {
     created_by_me: 'My Generated Leads Tracker',
     enquiries: 'Inbound Lead Enquiries',
     assets: 'Marketing Assets Hub',
+    business: 'Client Contracts & Revenue Splits',
   };
 
   const isLeadsView = ['unassigned', 'my', 'all', 'created_by_me'].includes(activeTab);
@@ -650,7 +701,9 @@ export default function BusinessRelationsPage() {
                     ) : sortedLeads.length === 0 ? (
                       <tr>
                         <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                          {activeTab === 'unassigned'
+                          {selectedStatuses.length === 0
+                            ? 'No stages selected in filter. Please check one or more stages in the Stage dropdown above.'
+                            : activeTab === 'unassigned'
                             ? 'No unassigned leads in the pool right now. Check back soon!'
                             : activeTab === 'created_by_me'
                             ? 'You have not originated any leads directly yet. Click "+ Create Lead" to add one!'
@@ -708,6 +761,9 @@ export default function BusinessRelationsPage() {
                               return (
                                 <span
                                   style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    whiteSpace: 'nowrap',
                                     padding: '4px 10px',
                                     borderRadius: '9999px',
                                     fontSize: '0.75rem',
@@ -718,7 +774,7 @@ export default function BusinessRelationsPage() {
                                     border: `1px solid ${meta.borderColor}`,
                                   }}
                                 >
-                                  ● {meta.label}
+                                  {meta.label}
                                 </span>
                               );
                             })()}
@@ -833,122 +889,334 @@ export default function BusinessRelationsPage() {
                   Preview Page ↗
                 </a>
               </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '12px' }}>
+                <button
+                  onClick={() => setEnquirySubTab('my')}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '24px',
+                    fontSize: '0.86rem',
+                    fontWeight: 600,
+                    background: enquirySubTab === 'my' ? 'rgba(99, 102, 241, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                    border: enquirySubTab === 'my' ? '1px solid #6366f1' : '1px solid var(--border-subtle)',
+                    color: enquirySubTab === 'my' ? '#ffffff' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span>My Direct Enquiries</span>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      background: enquirySubTab === 'my' ? '#6366f1' : 'rgba(255, 255, 255, 0.08)',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {enquiries.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setEnquirySubTab('promoter_pool')}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '24px',
+                    fontSize: '0.86rem',
+                    fontWeight: 600,
+                    background: enquirySubTab === 'promoter_pool' ? 'rgba(244, 63, 94, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                    border: enquirySubTab === 'promoter_pool' ? '1px solid #f43f5e' : '1px solid var(--border-subtle)',
+                    color: enquirySubTab === 'promoter_pool' ? '#ffffff' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span>Promoter Enquiries Pool</span>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      background: enquirySubTab === 'promoter_pool' ? '#f43f5e' : 'rgba(244, 63, 94, 0.25)',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {promoterEnquiries.length}
+                  </span>
+                </button>
+              </div>
             </div>
 
             {/* Enquiries Inbox Table */}
-            <div className="glass-panel" style={{ overflow: 'hidden' }}>
-              <div style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Inbound Lead Enquiries</h2>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                  Total Received: <strong>{enquiries.length}</strong>
-                </span>
-              </div>
+            {enquirySubTab === 'promoter_pool' ? (
+              <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                <div style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>📢</span> Promoter Enquiries Pool
+                    </h2>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      Inbound school enquiries driven by affiliate Promoter links (PM-XXX). Validate requirements, connect with the SPOC, and convert viable enquiries to pipeline leads.
+                    </p>
+                  </div>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    Total Pool: <strong>{promoterEnquiries.length}</strong>
+                  </span>
+                </div>
 
-              <div className="table-responsive">
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Code & Date
-                      </th>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        SPOC / Contact
-                      </th>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Institution Info
-                      </th>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                        Status
-                      </th>
-                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {enquiries.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                          No enquiries received yet. Share your direct referral link to start capturing institutional leads!
-                        </td>
+                <div className="table-responsive">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          Code & Date
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          Promoter
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          SPOC / Contact
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          Institution Info
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          Status
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                          Actions
+                        </th>
                       </tr>
-                    ) : (
-                      enquiries.map((enq) => (
-                        <tr key={enq.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                          <td style={{ padding: '16px 20px' }}>
-                            <div className="user-code-pill" style={{ color: '#38bdf8', marginBottom: '4px' }}>
-                              {enq.enquiry_code}
-                            </div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                              {new Date(enq.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '16px 20px' }}>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{enq.spoc_name}</div>
-                            <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>📞 {enq.phone}</div>
-                            {enq.email && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>✉️ {enq.email}</div>}
-                          </td>
-
-                          <td style={{ padding: '16px 20px' }}>
-                            <div style={{ fontWeight: 600 }}>{enq.institute_name || enq.institute_type}</div>
-                            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                              {enq.city ? `${enq.city} • ` : ''}{enq.student_count ? `${enq.student_count} Students` : ''}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '16px 20px' }}>
-                            <span
-                              style={{
-                                padding: '4px 10px',
-                                borderRadius: '9999px',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                textTransform: 'uppercase',
-                                background: enq.status === 'new' ? 'rgba(56, 189, 248, 0.15)' : enq.status === 'contacted' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(52, 211, 153, 0.15)',
-                                color: enq.status === 'new' ? '#38bdf8' : enq.status === 'contacted' ? '#fbbf24' : '#34d399',
-                                border: '1px solid var(--border-subtle)',
-                              }}
-                            >
-                              ● {enq.status.replace('_', ' ')}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                            <div style={{ display: 'inline-flex', gap: '8px' }}>
-                              <button
-                                onClick={() => setSelectedEnquiry(enq)}
-                                className="btn-secondary"
-                                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                              >
-                                Details
-                              </button>
-
-                              {enq.status !== 'converted_to_lead' && (
-                                <button
-                                  onClick={() => {
-                                    setEnquiryToConvert(enq);
-                                    setIsCreateModalOpen(true);
-                                  }}
-                                  className="btn-primary"
-                                  style={{
-                                    padding: '6px 12px',
-                                    fontSize: '0.8rem',
-                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                  }}
-                                >
-                                  Convert to Lead ➔
-                                </button>
-                              )}
-                            </div>
+                    </thead>
+                    <tbody>
+                      {promoterEnquiries.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            No enquiries from promoters in the pool yet.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        promoterEnquiries.map((enq) => (
+                          <tr key={enq.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                            <td style={{ padding: '16px 20px' }}>
+                              <div className="user-code-pill" style={{ color: '#38bdf8', marginBottom: '4px' }}>
+                                {enq.enquiry_code}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                {new Date(enq.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <div className="badge-role promoter" style={{ fontSize: '0.72rem', display: 'inline-flex', padding: '2px 8px', marginBottom: '4px' }}>
+                                {enq.promoter_code || 'PM-???'}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                {enq.promoter_name || 'Promoter Partner'}
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{enq.spoc_name}</div>
+                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>📞 {enq.phone}</div>
+                              {enq.email && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>✉️ {enq.email}</div>}
+                            </td>
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ fontWeight: 600 }}>{enq.institute_name || enq.institute_type}</div>
+                              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                                {enq.city ? `${enq.city} • ` : ''}{enq.student_count ? `${enq.student_count} Students` : ''}
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <span
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '9999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase',
+                                  background: enq.status === 'new' ? 'rgba(56, 189, 248, 0.15)' : enq.status === 'contacted' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(52, 211, 153, 0.15)',
+                                  color: enq.status === 'new' ? '#38bdf8' : enq.status === 'contacted' ? '#fbbf24' : '#34d399',
+                                  border: '1px solid var(--border-subtle)',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-flex',
+                                }}
+                              >
+                                {enq.status.replace('_', ' ')}
+                              </span>
+                            </td>
+
+                            <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', gap: '8px' }}>
+                                <button
+                                  onClick={() => setSelectedEnquiry(enq)}
+                                  className="btn-secondary"
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                >
+                                  Details
+                                </button>
+
+                                {enq.status !== 'converted_to_lead' && (
+                                  <button
+                                    onClick={() => {
+                                      const confirmed = window.confirm(
+                                        `Are you sure you want to convert enquiry ${enq.enquiry_code} (${enq.institute_name || enq.institute_type}) into an active pipeline lead?`
+                                      );
+                                      if (!confirmed) return;
+                                      setEnquiryToConvert(enq);
+                                      setIsCreateModalOpen(true);
+                                    }}
+                                    className="btn-primary"
+                                    style={{
+                                      padding: '6px 12px',
+                                      fontSize: '0.8rem',
+                                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                    }}
+                                  >
+                                    Convert to Lead ➔
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                <div style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Inbound Lead Enquiries</h2>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    Total Received: <strong>{enquiries.length}</strong>
+                  </span>
+                </div>
+
+                <div className="table-responsive">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          Code & Date
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          SPOC / Contact
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          Institution Info
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
+                          Status
+                        </th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {enquiries.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            No enquiries received yet. Share your direct referral link to start capturing institutional leads!
+                          </td>
+                        </tr>
+                      ) : (
+                        enquiries.map((enq) => (
+                          <tr key={enq.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                            <td style={{ padding: '16px 20px' }}>
+                              <div className="user-code-pill" style={{ color: '#38bdf8', marginBottom: '4px' }}>
+                                {enq.enquiry_code}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                {new Date(enq.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{enq.spoc_name}</div>
+                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>📞 {enq.phone}</div>
+                              {enq.email && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>✉️ {enq.email}</div>}
+                            </td>
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ fontWeight: 600 }}>{enq.institute_name || enq.institute_type}</div>
+                              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                                {enq.city ? `${enq.city} • ` : ''}{enq.student_count ? `${enq.student_count} Students` : ''}
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <span
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '9999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase',
+                                  background: enq.status === 'new' ? 'rgba(56, 189, 248, 0.15)' : enq.status === 'contacted' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(52, 211, 153, 0.15)',
+                                  color: enq.status === 'new' ? '#38bdf8' : enq.status === 'contacted' ? '#fbbf24' : '#34d399',
+                                  border: '1px solid var(--border-subtle)',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-flex',
+                                }}
+                              >
+                                {enq.status.replace('_', ' ')}
+                              </span>
+                            </td>
+
+                            <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', gap: '8px' }}>
+                                <button
+                                  onClick={() => setSelectedEnquiry(enq)}
+                                  className="btn-secondary"
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                >
+                                  Details
+                                </button>
+
+                                {enq.status !== 'converted_to_lead' && (
+                                  <button
+                                    onClick={() => {
+                                      const confirmed = window.confirm(
+                                        `Are you sure you want to convert enquiry ${enq.enquiry_code} (${enq.institute_name || enq.institute_type}) into an active pipeline lead?`
+                                      );
+                                      if (!confirmed) return;
+                                      setEnquiryToConvert(enq);
+                                      setIsCreateModalOpen(true);
+                                    }}
+                                    className="btn-primary"
+                                    style={{
+                                      padding: '6px 12px',
+                                      fontSize: '0.8rem',
+                                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                    }}
+                                  >
+                                    Convert to Lead ➔
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1272,6 +1540,14 @@ export default function BusinessRelationsPage() {
           </div>
         )}
 
+        {/* 4. BUSINESS & REWARDS TAB */}
+        {activeTab === 'business' && (
+          <ActorBusinessLedger
+            roleTitle="Business Relations • Client Contracts & Closures"
+            roleColor="var(--role-business-color)"
+          />
+        )}
+
         {/* CREATE LEAD MODAL */}
         <CreateLeadModal
           isOpen={isCreateModalOpen}
@@ -1298,7 +1574,14 @@ export default function BusinessRelationsPage() {
             <div className="glass-panel modal-dialog" style={{ maxWidth: '540px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
                 <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Enquiry {selectedEnquiry.enquiry_code}</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Enquiry {selectedEnquiry.enquiry_code}</h3>
+                    {(selectedEnquiry as any).promoter_code && (
+                      <span className="badge-role promoter" style={{ fontSize: '0.74rem' }}>
+                        Promoter: {(selectedEnquiry as any).promoter_code} {(selectedEnquiry as any).promoter_name ? `(${(selectedEnquiry as any).promoter_name})` : ''}
+                      </span>
+                    )}
+                  </div>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
                     Received on {new Date(selectedEnquiry.created_at).toLocaleString('en-IN')}
                   </p>
@@ -1358,6 +1641,10 @@ export default function BusinessRelationsPage() {
                 {selectedEnquiry.status !== 'converted_to_lead' && (
                   <button
                     onClick={() => {
+                      const confirmed = window.confirm(
+                        `Are you sure you want to convert enquiry ${selectedEnquiry.enquiry_code} (${selectedEnquiry.institute_name || selectedEnquiry.institute_type}) into an active pipeline lead?`
+                      );
+                      if (!confirmed) return;
                       const enq = selectedEnquiry;
                       setSelectedEnquiry(null);
                       setEnquiryToConvert(enq);
@@ -1366,7 +1653,7 @@ export default function BusinessRelationsPage() {
                     className="btn-primary"
                     style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
                   >
-                    Convert to Pipeline Lead ➔
+                    Convert to Lead ➔
                   </button>
                 )}
               </div>

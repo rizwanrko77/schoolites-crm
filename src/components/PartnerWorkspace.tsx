@@ -7,11 +7,15 @@ import LeadDetailModal from '@/components/LeadDetailModal';
 import LeadTableControls from '@/components/LeadTableControls';
 import ActorShell, { NavItem } from '@/components/ActorShell';
 import { formatSlotDate, formatSlotTime, getSlotModeIcon } from '@/lib/slotFormat';
-import { LEAD_STATUSES, getStatusMeta } from '@/lib/leadStatuses';
+import { LEAD_STATUSES, getStatusMeta, ALL_STATUS_IDS } from '@/lib/leadStatuses';
+import { usePipelineAutoSync } from '@/hooks/usePipelineAutoSync';
+import ActorBusinessLedger from '@/components/ActorBusinessLedger';
 
 interface Enquiry {
   id: string;
   enquiry_code: string;
+  owner_id?: string | null;
+  promoter_id?: string | null;
   spoc_name: string;
   phone: string;
   email: string | null;
@@ -21,7 +25,19 @@ interface Enquiry {
   city: string | null;
   student_count: string | null;
   message: string | null;
-  status: 'new' | 'contacted' | 'converted_to_lead' | 'discarded';
+  status: 'new' | 'contacted' | 'in_discussion' | 'converted_to_lead' | 'discarded';
+  internal_notes?: string | null;
+  claimed_at?: string | null;
+  converted_lead_id?: string | null;
+  lead_code?: string | null;
+  lead_status?: string | null;
+  lead_deal_value?: number | string | null;
+  owner_name?: string | null;
+  owner_code?: string | null;
+  promoter_name?: string | null;
+  promoter_code?: string | null;
+  manager_name?: string | null;
+  manager_code?: string | null;
   created_at: string;
 }
 
@@ -57,40 +73,50 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
   const [myLeads, setMyLeads] = useState<any[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [activeTab, setActiveTab] = useState<'enquiries' | 'leads' | 'assets'>('enquiries');
+  type PartnerTabType = 'enquiries' | 'leads' | 'assets' | 'business';
+  const [activeTab, setActiveTabState] = useState<PartnerTabType>('enquiries');
+
+  const setActiveTab = (tab: PartnerTabType) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState(null, '', url.toString());
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState('');
 
   // Leads Filter & Sort State with sessionStorage persistence
-  const [leadSearch, setLeadSearch] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return sessionStorage.getItem('partner_leads_search') || '';
-      } catch {}
-    }
-    return '';
-  });
-
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = sessionStorage.getItem('partner_leads_statuses');
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return [];
-  });
-
-  const [sortBy, setSortBy] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return sessionStorage.getItem('partner_leads_sort') || 'created_desc';
-      } catch {}
-    }
-    return 'created_desc';
-  });
-
+  const [leadSearch, setLeadSearch] = useState('');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(ALL_STATUS_IDS);
+  const [sortBy, setSortBy] = useState<string>('created_desc');
   const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // Hydrate URL tab and saved filters safely on mount after initial render
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const paramTab = new URLSearchParams(window.location.search).get('tab') as PartnerTabType;
+    const validTabs: PartnerTabType[] = ['enquiries', 'leads', 'assets', 'business'];
+    if (paramTab && validTabs.includes(paramTab)) {
+      setActiveTabState(paramTab);
+    }
+
+    try {
+      const savedSearch = sessionStorage.getItem('partner_leads_search');
+      if (savedSearch) setLeadSearch(savedSearch);
+
+      const savedStatuses = sessionStorage.getItem('partner_leads_statuses');
+      if (savedStatuses) {
+        const parsed = JSON.parse(savedStatuses);
+        if (Array.isArray(parsed) && parsed.length > 0) setSelectedStatuses(parsed);
+      }
+
+      const savedSort = sessionStorage.getItem('partner_leads_sort');
+      if (savedSort) setSortBy(savedSort);
+    } catch {}
+  }, []);
 
   // Asset Carousel & Lightbox States
   const [cardImageIndices, setCardImageIndices] = useState<Record<string, number>>({});
@@ -103,6 +129,24 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
   const [enquiryToConvert, setEnquiryToConvert] = useState<Enquiry | null>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+
+  const [promoterEnquiries, setPromoterEnquiries] = useState<any[]>([]);
+  const [enquirySubTab, setEnquirySubTab] = useState<'my' | 'promoter_pool'>('my');
+
+  // Enquiry filters, notes & claim state
+  const [enquirySearch, setEnquirySearch] = useState('');
+  const [enquiryStatusFilter, setEnquiryStatusFilter] = useState<string>('all');
+  const [enquiryLeadStageFilter, setEnquiryLeadStageFilter] = useState<string>('all');
+  const [enquiryColumnSort, setEnquiryColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedEnquiry) {
+      setNotesDraft(selectedEnquiry.internal_notes || '');
+    }
+  }, [selectedEnquiry]);
 
   // Persist filter preferences
   useEffect(() => {
@@ -127,12 +171,31 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
     }
   };
 
+  const fetchPromoterEnquiries = async () => {
+    if (roleBadgeClass !== 'pre_sales') return;
+    try {
+      const res = await fetch('/api/enquiries?view=promoter_pool');
+      if (res.ok) {
+        const data = await res.json();
+        setPromoterEnquiries(data.enquiries || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch promoter pool enquiries:', err);
+    }
+  };
+
   const fetchMyLeads = async () => {
     try {
+      if (selectedStatuses.length === 0) {
+        setMyLeads([]);
+        return;
+      }
       const params = new URLSearchParams();
       params.append('view', 'created_by_me');
       if (leadSearch.trim()) params.append('search', leadSearch.trim());
-      if (selectedStatuses.length > 0) params.append('statuses', selectedStatuses.join(','));
+      if (selectedStatuses.length < ALL_STATUS_IDS.length) {
+        params.append('statuses', selectedStatuses.join(','));
+      }
       params.append('sort_by', sortBy);
 
       const res = await fetch(`/api/leads?${params.toString()}`);
@@ -144,6 +207,14 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
       console.error(err);
     }
   };
+
+  usePipelineAutoSync(() => {
+    fetchMyLeads();
+    if (activeTab === 'enquiries') {
+      fetchEnquiries();
+      if (roleBadgeClass === 'pre_sales') fetchPromoterEnquiries();
+    }
+  });
 
   // Refetch leads when tab or search/filter changes
   useEffect(() => {
@@ -173,6 +244,159 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
     return sorted;
   }, [myLeads, columnSort]);
 
+  const filteredDirectEnquiries = useMemo(() => {
+    return enquiries.filter((e) => {
+      const matchEnquiryStatus = enquiryStatusFilter === 'all' || e.status === enquiryStatusFilter;
+      let matchLeadStage = true;
+      if (enquiryLeadStageFilter !== 'all') {
+        const normLeadStatus = (e.lead_status || '').toLowerCase();
+        const isConverted = Boolean(e.converted_lead_id || e.status === 'converted_to_lead');
+
+        if (enquiryLeadStageFilter === 'pending') {
+          matchLeadStage = !isConverted;
+        } else if (enquiryLeadStageFilter === 'active') {
+          matchLeadStage = isConverted && normLeadStatus !== 'won' && normLeadStatus !== 'lost';
+        } else if (enquiryLeadStageFilter === 'won') {
+          matchLeadStage = normLeadStatus === 'won';
+        } else if (enquiryLeadStageFilter === 'lost') {
+          matchLeadStage = normLeadStatus === 'lost';
+        } else {
+          matchLeadStage = normLeadStatus === enquiryLeadStageFilter.toLowerCase();
+        }
+      }
+      if (!matchEnquiryStatus || !matchLeadStage) return false;
+
+      if (!enquirySearch.trim()) return true;
+      const q = enquirySearch.toLowerCase().trim();
+      const matchCode = (e.enquiry_code || '').toLowerCase().includes(q);
+      const matchInst = (e.institute_name || '').toLowerCase().includes(q) || (e.institute_type || '').toLowerCase().includes(q);
+      const matchCity = (e.city || '').toLowerCase().includes(q);
+      const matchSpoc = (e.spoc_name || '').toLowerCase().includes(q);
+      const matchPromoter = (e.promoter_code || '').toLowerCase().includes(q) || (e.promoter_name || '').toLowerCase().includes(q);
+      const matchLeadCode = (e.lead_code || '').toLowerCase().includes(q);
+      return matchCode || matchInst || matchCity || matchSpoc || matchPromoter || matchLeadCode;
+    });
+  }, [enquiries, enquirySearch, enquiryStatusFilter, enquiryLeadStageFilter]);
+
+  const filteredPromoterEnquiries = useMemo(() => {
+    return promoterEnquiries.filter((e) => {
+      const matchEnquiryStatus = enquiryStatusFilter === 'all' || e.status === enquiryStatusFilter;
+      let matchLeadStage = true;
+      if (enquiryLeadStageFilter !== 'all') {
+        const normLeadStatus = (e.lead_status || '').toLowerCase();
+        const isConverted = Boolean(e.converted_lead_id || e.status === 'converted_to_lead');
+
+        if (enquiryLeadStageFilter === 'pending') {
+          matchLeadStage = !isConverted;
+        } else if (enquiryLeadStageFilter === 'active') {
+          matchLeadStage = isConverted && normLeadStatus !== 'won' && normLeadStatus !== 'lost';
+        } else if (enquiryLeadStageFilter === 'won') {
+          matchLeadStage = normLeadStatus === 'won';
+        } else if (enquiryLeadStageFilter === 'lost') {
+          matchLeadStage = normLeadStatus === 'lost';
+        } else {
+          matchLeadStage = normLeadStatus === enquiryLeadStageFilter.toLowerCase();
+        }
+      }
+      if (!matchEnquiryStatus || !matchLeadStage) return false;
+
+      if (!enquirySearch.trim()) return true;
+      const q = enquirySearch.toLowerCase().trim();
+      const matchCode = (e.enquiry_code || '').toLowerCase().includes(q);
+      const matchInst = (e.institute_name || '').toLowerCase().includes(q) || (e.institute_type || '').toLowerCase().includes(q);
+      const matchCity = (e.city || '').toLowerCase().includes(q);
+      const matchSpoc = (e.spoc_name || '').toLowerCase().includes(q);
+      const matchPromoter = (e.promoter_code || '').toLowerCase().includes(q) || (e.promoter_name || '').toLowerCase().includes(q);
+      const matchLeadCode = (e.lead_code || '').toLowerCase().includes(q);
+      return matchCode || matchInst || matchCity || matchSpoc || matchPromoter || matchLeadCode;
+    });
+  }, [promoterEnquiries, enquirySearch, enquiryStatusFilter, enquiryLeadStageFilter]);
+
+  // Enquiry Column Sorting
+  const sortedDirectEnquiries = useMemo(() => {
+    if (!enquiryColumnSort) return filteredDirectEnquiries;
+    const sorted = [...filteredDirectEnquiries];
+    const { column, direction } = enquiryColumnSort;
+    const modifier = direction === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      if (column === 'code') {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        if (timeA !== timeB) return (timeA - timeB) * modifier;
+        return a.enquiry_code.localeCompare(b.enquiry_code) * modifier;
+      }
+      if (column === 'institute') {
+        const nameA = a.institute_name || a.institute_type || '';
+        const nameB = b.institute_name || b.institute_type || '';
+        return nameA.localeCompare(nameB) * modifier;
+      }
+      if (column === 'team') {
+        const teamA = a.manager_name || a.owner_name || '';
+        const teamB = b.manager_name || b.owner_name || '';
+        return teamA.localeCompare(teamB) * modifier;
+      }
+      if (column === 'enquiry_stage') {
+        return (a.status || '').localeCompare(b.status || '') * modifier;
+      }
+      if (column === 'lead_stage') {
+        const stageA = a.lead_status || (a.status === 'converted_to_lead' ? 'unassigned' : 'pending');
+        const stageB = b.lead_status || (b.status === 'converted_to_lead' ? 'unassigned' : 'pending');
+        return stageA.localeCompare(stageB) * modifier;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [filteredDirectEnquiries, enquiryColumnSort]);
+
+  const sortedPromoterEnquiries = useMemo(() => {
+    if (!enquiryColumnSort) return filteredPromoterEnquiries;
+    const sorted = [...filteredPromoterEnquiries];
+    const { column, direction } = enquiryColumnSort;
+    const modifier = direction === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      if (column === 'code') {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        if (timeA !== timeB) return (timeA - timeB) * modifier;
+        return a.enquiry_code.localeCompare(b.enquiry_code) * modifier;
+      }
+      if (column === 'institute') {
+        const nameA = a.institute_name || a.institute_type || '';
+        const nameB = b.institute_name || b.institute_type || '';
+        return nameA.localeCompare(nameB) * modifier;
+      }
+      if (column === 'promoter') {
+        const promA = a.promoter_name || a.promoter_code || '';
+        const promB = b.promoter_name || b.promoter_code || '';
+        return promA.localeCompare(promB) * modifier;
+      }
+      if (column === 'enquiry_stage') {
+        return (a.status || '').localeCompare(b.status || '') * modifier;
+      }
+      if (column === 'lead_stage') {
+        const stageA = a.lead_status || (a.status === 'converted_to_lead' ? 'unassigned' : 'pending');
+        const stageB = b.lead_status || (b.status === 'converted_to_lead' ? 'unassigned' : 'pending');
+        return stageA.localeCompare(stageB) * modifier;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [filteredPromoterEnquiries, enquiryColumnSort]);
+
+  const handleToggleEnquiryColumnSort = (col: string) => {
+    if (enquiryColumnSort?.column === col) {
+      if (enquiryColumnSort.direction === 'asc') {
+        setEnquiryColumnSort({ column: col, direction: 'desc' });
+      } else {
+        setEnquiryColumnSort(null);
+      }
+    } else {
+      setEnquiryColumnSort({ column: col, direction: 'asc' });
+    }
+  };
+
   const handleToggleColumnSort = (col: string) => {
     if (columnSort?.column === col) {
       if (columnSort.direction === 'asc') {
@@ -187,7 +411,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
 
   const handleClearAll = () => {
     setLeadSearch('');
-    setSelectedStatuses([]);
+    setSelectedStatuses(ALL_STATUS_IDS);
     setSortBy('created_desc');
     setColumnSort(null);
   };
@@ -214,30 +438,91 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
         }
         setUser(data.user);
         fetchEnquiries();
+        if (roleBadgeClass === 'pre_sales') fetchPromoterEnquiries();
         fetchMyLeads();
         fetchAssets();
       })
       .catch(() => router.push('/login'))
       .finally(() => setLoading(false));
-  }, [router]);
+  }, [router, roleBadgeClass]);
 
   const handleUpdateStatus = async (enquiryId: string, newStatus: string) => {
     try {
-      const res = await fetch(`/api/enquiries/${enquiryId}/status`, {
+      const res = await fetch(`/api/enquiries/${enquiryId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
-        setToastMsg(`Enquiry marked as ${newStatus}.`);
+        setToastMsg(`Enquiry marked as ${newStatus.replace(/_/g, ' ')}.`);
         setTimeout(() => setToastMsg(''), 3000);
         fetchEnquiries();
+        if (roleBadgeClass === 'pre_sales') fetchPromoterEnquiries();
         if (selectedEnquiry && selectedEnquiry.id === enquiryId) {
           setSelectedEnquiry({ ...selectedEnquiry, status: newStatus as any });
         }
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to update status');
       }
     } catch {
       alert('Failed to update status');
+    }
+  };
+
+  const handleClaimEnquiry = async (enquiryId: string) => {
+    try {
+      setClaimingId(enquiryId);
+      const res = await fetch(`/api/enquiries/${enquiryId}/claim`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to claim enquiry');
+      }
+      setToastMsg(`🎉 ${data.message || 'Enquiry successfully grabbed!'}`);
+      setTimeout(() => setToastMsg(''), 4000);
+      await fetchEnquiries();
+      if (roleBadgeClass === 'pre_sales') await fetchPromoterEnquiries();
+      if (selectedEnquiry && selectedEnquiry.id === enquiryId) {
+        setSelectedEnquiry((prev) =>
+          prev
+            ? {
+                ...prev,
+                owner_name: user?.name,
+                owner_code: user?.user_code,
+                claimed_at: new Date().toISOString(),
+              }
+            : null
+        );
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    if (!selectedEnquiry) return;
+    try {
+      setIsSavingNotes(true);
+      const res = await fetch(`/api/enquiries/${selectedEnquiry.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ internal_notes: notesDraft }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save notes');
+      setToastMsg('Internal notes saved successfully.');
+      setTimeout(() => setToastMsg(''), 3000);
+      setSelectedEnquiry((prev) => (prev ? { ...prev, internal_notes: notesDraft } : null));
+      fetchEnquiries();
+      if (roleBadgeClass === 'pre_sales') fetchPromoterEnquiries();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSavingNotes(false);
     }
   };
 
@@ -255,6 +540,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
     );
     setTimeout(() => setToastMsg(''), 5000);
     fetchEnquiries();
+    if (roleBadgeClass === 'pre_sales') fetchPromoterEnquiries();
     fetchMyLeads();
     setEnquiryToConvert(null);
   };
@@ -350,12 +636,20 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
       isActive: activeTab === 'leads',
       onClick: () => setActiveTab('leads'),
     },
+    {
+      id: 'business',
+      label: 'Business & Rewards',
+      icon: '💼',
+      isActive: activeTab === 'business',
+      onClick: () => setActiveTab('business'),
+    },
   ];
 
   const activeTabTitles: Record<string, string> = {
     assets: 'Marketing Assets Hub',
     enquiries: 'Inbound Enquiries',
     leads: 'My Generated Leads',
+    business: 'Business & Reward Splits',
   };
 
   return (
@@ -472,121 +766,725 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
 
       {/* TAB 1: ENQUIRIES INBOX */}
       {activeTab === 'enquiries' && (
-        <div className="glass-panel" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Inbound Lead Enquiries</h2>
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Total Received: <strong>{enquiries.length}</strong>
-            </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {roleBadgeClass === 'pre_sales' && (
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setEnquirySubTab('my')}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '24px',
+                  fontSize: '0.86rem',
+                  fontWeight: 600,
+                  background: enquirySubTab === 'my' ? 'rgba(99, 102, 241, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                  border: enquirySubTab === 'my' ? '1px solid #6366f1' : '1px solid var(--border-subtle)',
+                  color: enquirySubTab === 'my' ? '#ffffff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>My Direct & Grabbed Enquiries</span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    background: enquirySubTab === 'my' ? '#6366f1' : 'rgba(255, 255, 255, 0.08)',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                  }}
+                >
+                  {enquiries.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setEnquirySubTab('promoter_pool')}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '24px',
+                  fontSize: '0.86rem',
+                  fontWeight: 600,
+                  background: enquirySubTab === 'promoter_pool' ? 'rgba(244, 63, 94, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                  border: enquirySubTab === 'promoter_pool' ? '1px solid #f43f5e' : '1px solid var(--border-subtle)',
+                  color: enquirySubTab === 'promoter_pool' ? '#ffffff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>📢 Promoter Enquiries Pool</span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    background: enquirySubTab === 'promoter_pool' ? '#f43f5e' : 'rgba(244, 63, 94, 0.25)',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                  }}
+                >
+                  {promoterEnquiries.length}
+                </span>
+              </button>
+            </div>
+          )}
+
+          {/* Search & Status Filters for Enquiries */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              background: 'rgba(255, 255, 255, 0.02)',
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: '240px' }}>
+              <input
+                type="text"
+                placeholder="Search by code, institution, city, SPOC, promoter..."
+                value={enquirySearch}
+                onChange={(e) => setEnquirySearch(e.target.value)}
+                className="input-field"
+                style={{ width: '100%', padding: '8px 14px', fontSize: '0.85rem' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  Enquiry Stage:
+                </label>
+                <select
+                  value={enquiryStatusFilter}
+                  onChange={(e) => setEnquiryStatusFilter(e.target.value)}
+                  className="input-field"
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: '0.82rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    color: '#ffffff',
+                    border: '1px solid var(--border-subtle)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="all">All Enquiry Stages</option>
+                  <option value="new">✨ New Inbound</option>
+                  <option value="contacted">📞 Contacted</option>
+                  <option value="in_discussion">💬 In Discussion</option>
+                  <option value="converted_to_lead">✅ Converted to Lead</option>
+                  <option value="discarded">✕ Discarded</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  Lead Stage:
+                </label>
+                <select
+                  value={enquiryLeadStageFilter}
+                  onChange={(e) => setEnquiryLeadStageFilter(e.target.value)}
+                  className="input-field"
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: '0.82rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    color: '#ffffff',
+                    border: '1px solid var(--border-subtle)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="all">All Lead Stages</option>
+                  <option value="pending">⏳ Pending Conversion</option>
+                  <option value="active">🎯 Active Lead Pipeline</option>
+                  <option value="assigned">📋 Assigned</option>
+                  <option value="demo_scheduled">📅 Demo Scheduled</option>
+                  <option value="demo_completed">🎥 Demo Completed</option>
+                  <option value="in_discussion">💬 In Discussion</option>
+                  <option value="following_up">🔄 Following Up</option>
+                  <option value="proposal_sent">📄 Proposal Sent</option>
+                  <option value="onboarding_initiated">🚀 Onboarding Initiated</option>
+                  <option value="onboarding_completed">🏁 Onboarding Completed</option>
+                  <option value="won">🎉 Won / Closed</option>
+                  <option value="lost">❌ Lost</option>
+                </select>
+              </div>
+
+              {(enquirySearch || enquiryStatusFilter !== 'all' || enquiryLeadStageFilter !== 'all' || enquiryColumnSort !== null) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnquirySearch('');
+                    setEnquiryStatusFilter('all');
+                    setEnquiryLeadStageFilter('all');
+                    setEnquiryColumnSort(null);
+                  }}
+                  className="btn-secondary"
+                  style={{
+                    padding: '7px 12px',
+                    fontSize: '0.8rem',
+                    color: '#f87171',
+                    borderColor: 'rgba(239, 68, 68, 0.35)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <span>✕</span>
+                  <span>Reset</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="table-responsive">
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Code & Date
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    SPOC / Contact
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Institution Info
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
-                    Status
-                  </th>
-                  <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {enquiries.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      No enquiries received yet. Share your unique referral link to start capturing leads!
-                    </td>
-                  </tr>
-                ) : (
-                  enquiries.map((enq) => (
-                    <tr
-                      key={enq.id}
-                      style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                    >
-                      <td style={{ padding: '16px 20px' }}>
-                        <div className="user-code-pill" style={{ color: '#38bdf8', marginBottom: '4px' }}>
-                          {enq.enquiry_code}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                          {new Date(enq.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        </div>
-                      </td>
+          {enquirySubTab === 'promoter_pool' && roleBadgeClass === 'pre_sales' ? (
+            <div className="glass-panel" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>📢</span> Promoter Enquiries Pool
+                  </h2>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Unclaimed inbound leads driven by affiliate Promoters. Grab an enquiry to add it to your queue and begin qualification.
+                  </p>
+                </div>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  Showing: <strong>{sortedPromoterEnquiries.length}</strong> of {promoterEnquiries.length}
+                </span>
+              </div>
 
-                      <td style={{ padding: '16px 20px' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{enq.spoc_name}</div>
-                        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>📞 {enq.phone}</div>
-                        {enq.email && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>✉️ {enq.email}</div>}
-                      </td>
+              <div className="table-responsive">
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('code')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'code' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Code & Date"
+                      >
+                        Code & Date {enquiryColumnSort?.column === 'code' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('institute')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'institute' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Institution Info"
+                      >
+                        Institution Info {enquiryColumnSort?.column === 'institute' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('promoter')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'promoter' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Promoter"
+                      >
+                        Promoter (Source) {enquiryColumnSort?.column === 'promoter' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('enquiry_stage')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'enquiry_stage' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Enquiry Stage"
+                      >
+                        Enquiry Stage {enquiryColumnSort?.column === 'enquiry_stage' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('lead_stage')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'lead_stage' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Lead Stage"
+                      >
+                        Lead Stage {enquiryColumnSort?.column === 'lead_stage' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedPromoterEnquiries.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          {enquirySearch || enquiryStatusFilter !== 'all' || enquiryLeadStageFilter !== 'all' || enquiryColumnSort !== null
+                            ? 'No promoter pool enquiries match your filters.'
+                            : 'No unclaimed enquiries from promoters in the pool.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedPromoterEnquiries.map((enq) => (
+                        <tr key={enq.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                          <td style={{ padding: '16px 20px' }}>
+                            <div className="user-code-pill" style={{ color: '#38bdf8', marginBottom: '4px' }}>
+                              {enq.enquiry_code}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              {new Date(enq.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </div>
+                          </td>
 
-                      <td style={{ padding: '16px 20px' }}>
-                        <div style={{ fontWeight: 600 }}>{enq.institute_name || enq.institute_type}</div>
-                        <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                          {enq.city ? `${enq.city} • ` : ''}{enq.student_count ? `${enq.student_count} Students` : ''}
-                        </div>
-                      </td>
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{enq.institute_name || enq.institute_type}</div>
+                            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              {[enq.institute_type, enq.city, enq.country, enq.student_count ? `${enq.student_count} Students` : ''].filter(Boolean).join(' • ')}
+                            </div>
+                          </td>
 
-                      <td style={{ padding: '16px 20px' }}>
-                        <span
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '9999px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            background: enq.status === 'new' ? 'rgba(56, 189, 248, 0.15)' : enq.status === 'contacted' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(52, 211, 153, 0.15)',
-                            color: enq.status === 'new' ? '#38bdf8' : enq.status === 'contacted' ? '#fbbf24' : '#34d399',
-                            border: '1px solid var(--border-subtle)',
-                          }}
-                        >
-                          ● {enq.status.replace('_', ' ')}
-                        </span>
-                      </td>
+                          <td style={{ padding: '16px 20px' }}>
+                            <div className="badge-role promoter" style={{ fontSize: '0.72rem', display: 'inline-flex', padding: '2px 8px', marginBottom: '4px' }}>
+                              {enq.promoter_code || 'PM-???'}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              {enq.promoter_name || 'Promoter Partner'}
+                            </div>
+                          </td>
 
-                      <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '8px' }}>
-                          <button
-                            onClick={() => setSelectedEnquiry(enq)}
-                            className="btn-secondary"
-                            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                          >
-                            Details
-                          </button>
-
-                          {enq.status !== 'converted_to_lead' && (
-                            <button
-                              onClick={() => {
-                                setEnquiryToConvert(enq);
-                                setIsLeadModalOpen(true);
-                              }}
-                              className="btn-primary"
+                          <td style={{ padding: '16px 20px' }}>
+                            <span
                               style={{
-                                padding: '6px 12px',
-                                fontSize: '0.8rem',
-                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                padding: '4px 10px',
+                                borderRadius: '9999px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                background:
+                                  enq.status === 'new'
+                                    ? 'rgba(56, 189, 248, 0.15)'
+                                    : enq.status === 'in_discussion'
+                                    ? 'rgba(168, 85, 247, 0.15)'
+                                    : enq.status === 'contacted'
+                                    ? 'rgba(251, 191, 36, 0.15)'
+                                    : enq.status === 'discarded'
+                                    ? 'rgba(239, 68, 68, 0.15)'
+                                    : 'rgba(52, 211, 153, 0.15)',
+                                color:
+                                  enq.status === 'new'
+                                    ? '#38bdf8'
+                                    : enq.status === 'in_discussion'
+                                    ? '#c084fc'
+                                    : enq.status === 'contacted'
+                                    ? '#fbbf24'
+                                    : enq.status === 'discarded'
+                                    ? '#f87171'
+                                    : '#34d399',
+                                border: '1px solid var(--border-subtle)',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
                               }}
                             >
-                              Convert to Lead ➔
-                            </button>
-                          )}
-                        </div>
-                      </td>
+                              <span>
+                                {enq.status === 'new'
+                                  ? '✨'
+                                  : enq.status === 'in_discussion'
+                                  ? '💬'
+                                  : enq.status === 'contacted'
+                                  ? '📞'
+                                  : enq.status === 'discarded'
+                                  ? '✕'
+                                  : '✅'}
+                              </span>
+                              <span>{enq.status === 'converted_to_lead' ? 'Converted to Lead' : enq.status.replace(/_/g, ' ')}</span>
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '16px 20px' }}>
+                            {enq.lead_status ? (
+                              <div>
+                                <span
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    background: (enq.lead_status.toLowerCase() === 'won') ? 'rgba(52, 211, 153, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                                    color: (enq.lead_status.toLowerCase() === 'won') ? '#34d399' : '#818cf8',
+                                    border: '1px solid currentColor',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  <span>{(enq.lead_status.toLowerCase() === 'won') ? '🎉' : '🎯'}</span>
+                                  <span>{(enq.lead_status.toLowerCase() === 'won') ? 'Won' : enq.lead_status.replace(/_/g, ' ')}</span>
+                                </span>
+                                {enq.lead_code && (
+                                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                                    {enq.lead_code}
+                                  </div>
+                                )}
+                              </div>
+                            ) : enq.status === 'converted_to_lead' ? (
+                              <span style={{ fontSize: '0.78rem', color: '#fbbf24', fontStyle: 'italic' }}>
+                                Assigning Manager...
+                              </span>
+                            ) : enq.status === 'discarded' ? (
+                              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                N/A (Discarded)
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                Pending Conversion
+                              </span>
+                            )}
+                          </td>
+
+                          <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '8px' }}>
+                              <button
+                                onClick={() => setSelectedEnquiry(enq)}
+                                className="btn-secondary"
+                                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                              >
+                                Details
+                              </button>
+
+                              <button
+                                onClick={() => handleClaimEnquiry(enq.id)}
+                                disabled={claimingId === enq.id}
+                                className="btn-primary"
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.8rem',
+                                  background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                                  border: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                }}
+                              >
+                                <span>⚡</span>
+                                <span>{claimingId === enq.id ? 'Claiming...' : 'Grab Enquiry'}</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="glass-panel" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>My Direct & Grabbed Enquiries</h2>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Your enquiries
+                  </p>
+                </div>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  Showing: <strong>{sortedDirectEnquiries.length}</strong> of {enquiries.length}
+                </span>
+              </div>
+
+              <div className="table-responsive">
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('code')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'code' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Code & Date"
+                      >
+                        Code & Date {enquiryColumnSort?.column === 'code' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('institute')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'institute' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Institution Info"
+                      >
+                        Institution Info {enquiryColumnSort?.column === 'institute' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('team')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'team' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Involved Team"
+                      >
+                        Involved Team {enquiryColumnSort?.column === 'team' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('enquiry_stage')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'enquiry_stage' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Enquiry Stage"
+                      >
+                        Enquiry Stage {enquiryColumnSort?.column === 'enquiry_stage' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th
+                        onClick={() => handleToggleEnquiryColumnSort('lead_stage')}
+                        style={{
+                          padding: '14px 20px',
+                          fontWeight: 600,
+                          color: enquiryColumnSort?.column === 'lead_stage' ? '#818cf8' : 'var(--text-muted)',
+                          fontSize: '0.78rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                        title="Click to sort by Lead Stage"
+                      >
+                        Lead Stage {enquiryColumnSort?.column === 'lead_stage' ? (enquiryColumnSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                      </th>
+                      <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                        Actions
+                      </th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {sortedDirectEnquiries.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          {enquirySearch || enquiryStatusFilter !== 'all' || enquiryLeadStageFilter !== 'all' || enquiryColumnSort !== null
+                            ? 'No direct or grabbed enquiries match your filters.'
+                            : 'No enquiries in your queue yet. Claim from the Promoter Pool or share your direct link!'}
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedDirectEnquiries.map((enq) => (
+                        <tr
+                          key={enq.id}
+                          style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                        >
+                          <td style={{ padding: '16px 20px' }}>
+                            <div className="user-code-pill" style={{ color: '#38bdf8', marginBottom: '4px' }}>
+                              {enq.enquiry_code}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              {new Date(enq.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{enq.institute_name || enq.institute_type}</div>
+                            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              {[enq.institute_type, enq.city, enq.country, enq.student_count ? `${enq.student_count} Students` : ''].filter(Boolean).join(' • ')}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.8rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', width: '64px' }}>Owner:</span>
+                                <span style={{ color: 'var(--text-secondary)' }}>
+                                  {enq.owner_code ? `${enq.owner_name} (${enq.owner_code})` : '—'}
+                                </span>
+                              </div>
+                              {enq.promoter_code && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', width: '64px' }}>Promoter:</span>
+                                  <span className="badge-role promoter" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                                    {enq.promoter_code}
+                                  </span>
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', width: '64px' }}>Manager:</span>
+                                {enq.manager_name ? (
+                                  <span style={{ color: 'var(--role-business-color)' }}>
+                                    {enq.manager_name} ({enq.manager_code})
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.76rem' }}>
+                                    {enq.status === 'converted_to_lead' ? 'Unassigned' : 'Pending Conversion'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '16px 20px' }}>
+                            <span
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '9999px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                background:
+                                  enq.status === 'new'
+                                    ? 'rgba(56, 189, 248, 0.15)'
+                                    : enq.status === 'in_discussion'
+                                    ? 'rgba(168, 85, 247, 0.15)'
+                                    : enq.status === 'contacted'
+                                    ? 'rgba(251, 191, 36, 0.15)'
+                                    : enq.status === 'discarded'
+                                    ? 'rgba(239, 68, 68, 0.15)'
+                                    : 'rgba(52, 211, 153, 0.15)',
+                                color:
+                                  enq.status === 'new'
+                                    ? '#38bdf8'
+                                    : enq.status === 'in_discussion'
+                                    ? '#c084fc'
+                                    : enq.status === 'contacted'
+                                    ? '#fbbf24'
+                                    : enq.status === 'discarded'
+                                    ? '#f87171'
+                                    : '#34d399',
+                                border: '1px solid var(--border-subtle)',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                            >
+                              <span>
+                                {enq.status === 'new'
+                                  ? '✨'
+                                  : enq.status === 'in_discussion'
+                                  ? '💬'
+                                  : enq.status === 'contacted'
+                                  ? '📞'
+                                  : enq.status === 'discarded'
+                                  ? '✕'
+                                  : '✅'}
+                              </span>
+                              <span>{enq.status === 'converted_to_lead' ? 'Converted to Lead' : enq.status.replace(/_/g, ' ')}</span>
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '16px 20px' }}>
+                            {enq.lead_status ? (
+                              <div>
+                                <span
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    background: (enq.lead_status.toLowerCase() === 'won') ? 'rgba(52, 211, 153, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                                    color: (enq.lead_status.toLowerCase() === 'won') ? '#34d399' : '#818cf8',
+                                    border: '1px solid currentColor',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  <span>{(enq.lead_status.toLowerCase() === 'won') ? '🎉' : '🎯'}</span>
+                                  <span>{(enq.lead_status.toLowerCase() === 'won') ? 'Won' : enq.lead_status.replace(/_/g, ' ')}</span>
+                                </span>
+                                {enq.lead_code && (
+                                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                                    {enq.lead_code}
+                                  </div>
+                                )}
+                              </div>
+                            ) : enq.status === 'converted_to_lead' ? (
+                              <span style={{ fontSize: '0.78rem', color: '#fbbf24', fontStyle: 'italic' }}>
+                                Assigning Manager...
+                              </span>
+                            ) : enq.status === 'discarded' ? (
+                              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                N/A (Discarded)
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                Pending Conversion
+                              </span>
+                            )}
+                          </td>
+
+                          <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                            <button
+                              onClick={() => setSelectedEnquiry(enq)}
+                              className="btn-secondary"
+                              style={{ padding: '6px 14px', fontSize: '0.82rem' }}
+                            >
+                              Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -703,7 +1601,9 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                   {sortedMyLeads.length === 0 ? (
                     <tr>
                       <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        No leads found matching your criteria. Convert an enquiry or click "+ Create Lead" to start!
+                        {selectedStatuses.length === 0
+                          ? 'No stages selected in filter. Please check one or more stages in the Stage dropdown above.'
+                          : 'No leads found matching your criteria. Convert an enquiry or click "+ Create Lead" to start!'}
                       </td>
                     </tr>
                   ) : (
@@ -740,6 +1640,9 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                             return (
                               <span
                                 style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  whiteSpace: 'nowrap',
                                   padding: '4px 10px',
                                   borderRadius: '9999px',
                                   fontSize: '0.75rem',
@@ -750,7 +1653,7 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
                                   border: `1px solid ${meta.borderColor}`,
                                 }}
                               >
-                                ● {meta.label}
+                                {meta.label}
                               </span>
                             );
                           })()}
@@ -1430,7 +2333,9 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
             className="glass-panel"
             style={{
               width: '100%',
-              maxWidth: '520px',
+              maxWidth: '580px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
               padding: '32px',
               boxShadow: 'var(--shadow-lg)',
               animation: 'slideUp 0.2s ease',
@@ -1438,7 +2343,19 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div>
-                <span className="user-code-pill" style={{ color: '#38bdf8' }}>{selectedEnquiry.enquiry_code}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span className="user-code-pill" style={{ color: '#38bdf8' }}>{selectedEnquiry.enquiry_code}</span>
+                  {(selectedEnquiry as any).promoter_code && (
+                    <span className="badge-role promoter" style={{ fontSize: '0.74rem' }}>
+                      Promoter: {(selectedEnquiry as any).promoter_code} {(selectedEnquiry as any).promoter_name ? `(${(selectedEnquiry as any).promoter_name})` : ''}
+                    </span>
+                  )}
+                  {selectedEnquiry.claimed_at && (
+                    <span style={{ fontSize: '0.72rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      ⚡ Claimed Lead
+                    </span>
+                  )}
+                </div>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '6px' }}>Enquiry Details</h2>
               </div>
               <button onClick={() => setSelectedEnquiry(null)} style={{ color: 'var(--text-muted)', fontSize: '1.4rem' }}>
@@ -1446,66 +2363,235 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
               </button>
             </div>
 
+            {/* Unclaimed Promoter Lead Banner */}
+            {selectedEnquiry.promoter_id &&
+              (!selectedEnquiry.claimed_at || (selectedEnquiry as any).owner_id === (selectedEnquiry as any).promoter_id) &&
+              selectedEnquiry.status !== 'converted_to_lead' &&
+              selectedEnquiry.status !== 'discarded' && (
+                <div
+                  style={{
+                    padding: '14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(225, 29, 72, 0.25) 100%)',
+                    border: '1px solid rgba(244, 63, 94, 0.4)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#fda4af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>📢</span> Unclaimed Promoter Lead
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Grab this lead to move it into your direct queue and claim attribution.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleClaimEnquiry(selectedEnquiry.id)}
+                    disabled={claimingId === selectedEnquiry.id}
+                    className="btn-primary"
+                    style={{
+                      padding: '7px 14px',
+                      fontSize: '0.82rem',
+                      background: '#f43f5e',
+                      border: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span>⚡</span>
+                    <span>{claimingId === selectedEnquiry.id ? 'Claiming...' : 'Grab Lead'}</span>
+                  </button>
+                </div>
+              )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.9rem', marginBottom: '24px' }}>
               <div>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block' }}>SPOC / Contact Person</span>
-                <strong style={{ color: 'var(--text-primary)' }}>{selectedEnquiry.spoc_name}</strong>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '1rem' }}>{selectedEnquiry.spoc_name}</strong>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ padding: '10px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '6px' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', display: 'block', marginBottom: '3px' }}>Phone Number</span>
+                  <a href={`tel:${selectedEnquiry.phone}`} style={{ color: '#38bdf8', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    📞 {selectedEnquiry.phone}
+                  </a>
+                </div>
+                <div style={{ padding: '10px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '6px' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', display: 'block', marginBottom: '3px' }}>Email Address</span>
+                  {selectedEnquiry.email ? (
+                    <a href={`mailto:${selectedEnquiry.email}`} style={{ color: '#818cf8', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      ✉️ {selectedEnquiry.email}
+                    </a>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)' }}>—</span>
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block' }}>Phone</span>
-                  <strong>{selectedEnquiry.phone}</strong>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', display: 'block' }}>Institute Name & Type</span>
+                  <strong>{selectedEnquiry.institute_name || selectedEnquiry.institute_type}</strong>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{selectedEnquiry.institute_type || 'School'}</div>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block' }}>Email</span>
-                  <strong>{selectedEnquiry.email || '—'}</strong>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', display: 'block' }}>Location & Size</span>
+                  <strong>{[selectedEnquiry.city, selectedEnquiry.country || 'India'].filter(Boolean).join(', ')}</strong>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    {selectedEnquiry.student_count ? `${selectedEnquiry.student_count} Students` : 'Size unspecified'}
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {/* Team Involved */}
+              <div style={{ padding: '12px 14px', background: 'rgba(99, 102, 241, 0.06)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.82rem' }}>
                 <div>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block' }}>Institute Type</span>
-                  <strong>{selectedEnquiry.institute_type || '—'}</strong>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase', display: 'block' }}>Owner</span>
+                  <strong style={{ color: '#c7d2fe' }}>
+                    {selectedEnquiry.owner_code ? `${selectedEnquiry.owner_name} (${selectedEnquiry.owner_code})` : 'Unclaimed / Pool'}
+                  </strong>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block' }}>Institute Name</span>
-                  <strong>{selectedEnquiry.institute_name || '—'}</strong>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase', display: 'block' }}>Manager</span>
+                  <strong style={{ color: selectedEnquiry.manager_name ? '#34d399' : 'var(--text-muted)' }}>
+                    {selectedEnquiry.manager_name ? `${selectedEnquiry.manager_name} (${selectedEnquiry.manager_code})` : 'Pending Conversion'}
+                  </strong>
                 </div>
               </div>
 
               {selectedEnquiry.message && (
                 <div style={{ padding: '12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-sm)' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '4px' }}>Requirements / Message</span>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{selectedEnquiry.message}</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0, whiteSpace: 'pre-line' }}>{selectedEnquiry.message}</p>
                 </div>
               )}
+
+              {/* Qualification Stage Selector */}
+              <div style={{ padding: '12px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', fontWeight: 600 }}>Enquiry Stage</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Current: <strong style={{ color: '#ffffff', textTransform: 'capitalize' }}>{selectedEnquiry.status.replace(/_/g, ' ')}</strong>
+                  </span>
+                </div>
+                {selectedEnquiry.status !== 'converted_to_lead' ? (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {(['new', 'contacted', 'in_discussion', 'discarded'] as const).map((st) => {
+                      const isActive = selectedEnquiry.status === st;
+                      const labels: Record<string, string> = {
+                        new: '✨ New',
+                        contacted: '📞 Contacted',
+                        in_discussion: '💬 In Discussion',
+                        discarded: '✕ Discard',
+                      };
+                      return (
+                        <button
+                          key={st}
+                          type="button"
+                          disabled={isActive}
+                          onClick={() => handleUpdateStatus(selectedEnquiry.id, st)}
+                          style={{
+                            padding: '5px 12px',
+                            fontSize: '0.78rem',
+                            borderRadius: '16px',
+                            fontWeight: 600,
+                            cursor: isActive ? 'default' : 'pointer',
+                            background: isActive ? 'rgba(99, 102, 241, 0.3)' : 'rgba(255, 255, 255, 0.05)',
+                            border: isActive ? '1px solid #6366f1' : '1px solid var(--border-subtle)',
+                            color: isActive ? '#ffffff' : 'var(--text-secondary)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {labels[st]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.82rem', color: '#34d399', fontWeight: 600 }}>
+                    ✅ Already Converted to Pipeline Lead {selectedEnquiry.lead_code ? `(${selectedEnquiry.lead_code})` : ''}
+                  </div>
+                )}
+              </div>
+
+              {/* Internal Interaction & Follow-up Notes */}
+              <div style={{ padding: '12px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', fontWeight: 600 }}>Internal Notes</span>
+                  <span style={{ fontSize: '0.72rem', color: '#fbbf24' }}>🔒 Internal Pre-Sales & Admin Only</span>
+                </div>
+                <textarea
+                  value={notesDraft}
+                  onChange={(e) => setNotesDraft(e.target.value)}
+                  rows={3}
+                  placeholder="Record interaction notes, call feedback, client concerns, follow-up schedule..."
+                  className="input-field"
+                  style={{ width: '100%', fontSize: '0.85rem', resize: 'vertical', minHeight: '68px', padding: '8px 12px', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveNotes}
+                    disabled={isSavingNotes || notesDraft === (selectedEnquiry.internal_notes || '')}
+                    className="btn-secondary"
+                    style={{
+                      padding: '5px 14px',
+                      fontSize: '0.78rem',
+                      opacity: notesDraft === (selectedEnquiry.internal_notes || '') ? 0.6 : 1,
+                      cursor: notesDraft === (selectedEnquiry.internal_notes || '') ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isSavingNotes ? 'Saving Notes...' : 'Save Notes'}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button onClick={() => setSelectedEnquiry(null)} className="btn-secondary">
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
+              <button onClick={() => setSelectedEnquiry(null)} className="btn-secondary" style={{ padding: '8px 18px', fontSize: '0.86rem' }}>
                 Close
               </button>
 
               {selectedEnquiry.status !== 'converted_to_lead' && (
                 <button
                   onClick={() => {
+                    const confirmed = window.confirm(
+                      `Are you sure you want to convert enquiry ${selectedEnquiry.enquiry_code} (${selectedEnquiry.institute_name || selectedEnquiry.institute_type}) into an active pipeline lead?`
+                    );
+                    if (!confirmed) return;
                     const enq = selectedEnquiry;
                     setSelectedEnquiry(null);
                     setEnquiryToConvert(enq);
                     setIsLeadModalOpen(true);
                   }}
                   className="btn-primary"
-                  style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    padding: '8px 18px',
+                    fontSize: '0.86rem',
+                    fontWeight: 700,
+                  }}
                 >
-                  Convert to Pipeline Lead ➔
+                  Convert to Lead ➔
                 </button>
               )}
             </div>
           </div>
         </div>
       )}
-    </div>
-  </ActorShell>
+
+        {/* TAB 4: BUSINESS & REWARDS */}
+        {activeTab === 'business' && (
+          <ActorBusinessLedger
+            roleTitle={`${roleTitle} • Business & Rewards`}
+            roleColor={roleColor}
+          />
+        )}
+      </div>
+    </ActorShell>
   );
 }

@@ -40,6 +40,7 @@ interface CreateLeadModalProps {
   onClose: () => void;
   onSuccess: (lead: any, duplicateWarning?: string) => void;
   initialEnquiry?: any | null;
+  leadToEdit?: any | null;
 }
 
 const DRAFT_STORAGE_KEY = 'schoolites_lead_form_draft';
@@ -78,6 +79,7 @@ export default function CreateLeadModal({
   onClose,
   onSuccess,
   initialEnquiry,
+  leadToEdit,
 }: CreateLeadModalProps) {
   const [formData, setFormData] = useState<any>(INITIAL_BLANK_LEAD_FORM);
 
@@ -179,11 +181,75 @@ export default function CreateLeadModal({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Reset or pre-fill form when modal opens or initialEnquiry changes (with draft restoration)
+  // Reset or pre-fill form when modal opens, initialEnquiry changes, or leadToEdit changes
   useEffect(() => {
     if (!isOpen) return;
 
-    if (initialEnquiry) {
+    if (leadToEdit) {
+      const isDmSame =
+        leadToEdit.dm_same_as_spoc !== undefined && leadToEdit.dm_same_as_spoc !== null
+          ? Boolean(leadToEdit.dm_same_as_spoc)
+          : Boolean(
+              leadToEdit.dm_name &&
+              leadToEdit.spoc_name &&
+              leadToEdit.dm_name === leadToEdit.spoc_name &&
+              leadToEdit.dm_phone === leadToEdit.spoc_phone
+            );
+
+      setFormData({
+        ...INITIAL_BLANK_LEAD_FORM,
+        institute_type: leadToEdit.institute_type || 'School',
+        institute_name: leadToEdit.institute_name || '',
+        country: leadToEdit.country || 'India',
+        city: leadToEdit.city || '',
+        student_strength: mapStudentStrength(leadToEdit.student_strength) || leadToEdit.student_strength || '',
+        current_erp: leadToEdit.current_erp || 'unsure',
+        current_erp_name: leadToEdit.current_erp_name || '',
+        spoc_name: leadToEdit.spoc_name || '',
+        spoc_role: leadToEdit.spoc_role || '',
+        spoc_phone: leadToEdit.spoc_phone || '',
+        spoc_email: leadToEdit.spoc_email || '',
+        dm_same_as_spoc: isDmSame,
+        dm_name: leadToEdit.dm_name || '',
+        dm_role: leadToEdit.dm_role || '',
+        dm_phone: leadToEdit.dm_phone || '',
+        dm_email: leadToEdit.dm_email || '',
+        additional_contact_name: leadToEdit.additional_contact_name || '',
+        additional_contact_role: leadToEdit.additional_contact_role || '',
+        additional_contact_phone: leadToEdit.additional_contact_phone || '',
+        additional_contact_email: leadToEdit.additional_contact_email || '',
+        decision_flow: leadToEdit.decision_flow || '',
+        preferred_slot_date: leadToEdit.preferred_slot_date
+          ? new Date(leadToEdit.preferred_slot_date).toISOString().split('T')[0]
+          : '',
+        preferred_slot_time: leadToEdit.preferred_slot_time || '',
+        preferred_slot_mode: leadToEdit.preferred_slot_mode || '',
+        expected_start_date: leadToEdit.expected_start_date || '',
+        additional_details: leadToEdit.additional_details || '',
+      });
+
+      const rawStartDate = leadToEdit.expected_start_date || '';
+      if (EXPECTED_START_OPTIONS.includes(rawStartDate) && rawStartDate !== 'Specific Date...') {
+        setStartPreset(rawStartDate);
+        setCustomStartDate('');
+      } else if (rawStartDate) {
+        setStartPreset('Specific Date...');
+        const parsedDate = rawStartDate.includes('T') ? rawStartDate.split('T')[0] : rawStartDate;
+        setCustomStartDate(parsedDate);
+      } else {
+        setStartPreset('');
+        setCustomStartDate('');
+      }
+
+      const hasAdditionalContact = Boolean(
+        leadToEdit.additional_contact_name ||
+        leadToEdit.additional_contact_role ||
+        leadToEdit.additional_contact_phone ||
+        leadToEdit.additional_contact_email
+      );
+      setShowAdditionalContact(hasAdditionalContact);
+      setError('');
+    } else if (initialEnquiry) {
       setFormData({
         ...INITIAL_BLANK_LEAD_FORM,
         institute_type: initialEnquiry.institute_type || '',
@@ -249,11 +315,11 @@ export default function CreateLeadModal({
       }
       setError('');
     }
-  }, [isOpen, initialEnquiry]);
+  }, [isOpen, initialEnquiry, leadToEdit]);
 
-  // Auto-save form draft to localStorage whenever fields change (for fresh leads, not inbound conversions)
+  // Auto-save form draft to localStorage whenever fields change (for fresh leads, not inbound conversions or edits)
   useEffect(() => {
-    if (!isOpen || initialEnquiry) return;
+    if (!isOpen || initialEnquiry || leadToEdit) return;
 
     // Check if any field differs from blank defaults
     const hasData = Object.keys(formData).some((k) => {
@@ -280,7 +346,7 @@ export default function CreateLeadModal({
         localStorage.removeItem(DRAFT_STORAGE_KEY);
       } catch (e) { }
     }
-  }, [formData, startPreset, customStartDate, showAdditionalContact, isOpen, initialEnquiry]);
+  }, [formData, startPreset, customStartDate, showAdditionalContact, isOpen, initialEnquiry, leadToEdit]);
 
   // Auto-revert clear confirmation after 4 seconds
   useEffect(() => {
@@ -349,77 +415,96 @@ export default function CreateLeadModal({
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/leads', {
-        method: 'POST',
+      const url = leadToEdit ? `/api/leads/${leadToEdit.id}` : '/api/leads';
+      const method = leadToEdit ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to create lead.');
+        throw new Error(data.error || (leadToEdit ? 'Failed to update lead.' : 'Failed to create lead.'));
       }
 
-      try {
-        localStorage.removeItem(DRAFT_STORAGE_KEY);
-      } catch (e) { }
+      if (!leadToEdit) {
+        try {
+          localStorage.removeItem(DRAFT_STORAGE_KEY);
+        } catch (e) { }
+      }
 
       onSuccess(data.lead, data.duplicate_warning);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Error creating lead.');
+      setError(err.message || (leadToEdit ? 'Error updating lead.' : 'Error creating lead.'));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" style={{ zIndex: leadToEdit ? 1300 : 1200 }}>
       <div className="glass-panel modal-dialog">
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '24px' }}>
           <div>
-            <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Create New Lead</h2>
+            <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>
+              {leadToEdit ? (
+                <>
+                  ✏️ Edit Lead Details: <span style={{ color: '#818cf8' }}>{leadToEdit.lead_code}</span>
+                </>
+              ) : (
+                'Create New Lead'
+              )}
+            </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-              {initialEnquiry ? `Converting from Enquiry ${initialEnquiry.enquiry_code}` : 'Register a qualified school/institution into the active pipeline'}
+              {leadToEdit
+                ? 'Updates will be saved and recorded in the audit history.'
+                : initialEnquiry
+                ? `Converting from Enquiry ${initialEnquiry.enquiry_code}`
+                : 'Register a qualified school/institution into the active pipeline'}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-            <button
-              id="clear-lead-form-btn"
-              type="button"
-              onClick={handleClearForm}
-              title={confirmClear ? 'Click again to confirm reset' : 'Clear all fields'}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '6px 12px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                color: confirmClear ? '#ffffff' : '#f87171',
-                background: confirmClear ? '#dc2626' : 'rgba(239, 68, 68, 0.08)',
-                border: confirmClear ? '1px solid #ef4444' : '1px solid rgba(239, 68, 68, 0.25)',
-                borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                if (!confirmClear) {
-                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)';
-                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.45)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!confirmClear) {
-                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
-                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.25)';
-                }
-              }}
-            >
-              <span>{confirmClear ? '⚠️' : '🗑️'}</span>
-              <span>{confirmClear ? 'Confirm Clear?' : 'Clear Form'}</span>
-            </button>
+            {!leadToEdit && (
+              <button
+                id="clear-lead-form-btn"
+                type="button"
+                onClick={handleClearForm}
+                title={confirmClear ? 'Click again to confirm reset' : 'Clear all fields'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: confirmClear ? '#ffffff' : '#f87171',
+                  background: confirmClear ? '#dc2626' : 'rgba(239, 68, 68, 0.08)',
+                  border: confirmClear ? '1px solid #ef4444' : '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!confirmClear) {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)';
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.45)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!confirmClear) {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                  }
+                }}
+              >
+                <span>{confirmClear ? '⚠️' : '🗑️'}</span>
+                <span>{confirmClear ? 'Confirm Clear?' : 'Clear Form'}</span>
+              </button>
+            )}
             <button
               id="close-lead-modal-btn"
               type="button"
@@ -1132,7 +1217,13 @@ export default function CreateLeadModal({
               Cancel
             </button>
             <button id="submit-create-lead-btn" type="submit" className="btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating Lead...' : 'Submit Lead to Pipeline'}
+              {isSubmitting
+                ? leadToEdit
+                  ? 'Saving Changes...'
+                  : 'Creating Lead...'
+                : leadToEdit
+                ? 'Save Changes ✓'
+                : 'Submit Lead to Pipeline'}
             </button>
           </div>
         </form>
