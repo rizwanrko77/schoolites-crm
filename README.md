@@ -1,0 +1,60 @@
+# Schoolites CRM - Enterprise Educational ERP Sales Engine
+
+Schoolites is a production-grade, multi-actor B2B Customer Relationship Management (CRM) and business development portal engineered for educational ERP software sales targeting schools, colleges, and educational institutions.
+
+---
+
+## 📚 Documentation Directory
+
+Complete system documentation is available in the [`docs/`](file:///c:/Users/91725/schoolites/docs) directory:
+
+1. **[Developer Guide (`docs/DEVELOPER_GUIDE.md`)](file:///c:/Users/91725/schoolites/docs/DEVELOPER_GUIDE.md)**:
+   - Full-stack technical architecture (Next.js 16 App Router, React 19, TypeScript, Neon Serverless PostgreSQL, S3 Object Storage).
+   - Relational database schema, ER diagram, foreign keys, and integrity constraints.
+   - Core algorithmic logic: 3-tier commission split engine, closer priority rule, atomic lead grabbing (`HTTP 409`), stage governance, and zero-compute browser auto-sync.
+   - Google Places API (New) integration, CSV/TSV bulk ingestion, and quota allocation engine.
+   - Security, stateless OTP authentication, and environment configuration.
+   - Build commands and automated test suites.
+
+2. **[User Manual for All Actors (`docs/USER_MANUAL.md`)](file:///c:/Users/91725/schoolites/docs/USER_MANUAL.md)**:
+   - Comprehensive, role-by-role operating instructions.
+   - **Root Administrator (`ADM-xxx`)**: User governance, form configurator, central places database, marketing hub, and UTR payout clearances.
+   - **Pre-Sales Representative (`PS-xxx`)**: Places calling engine ("New Data" unworked queue, outcome logging, quota requests $\le 10$), promoter pool qualification, and 1-click lead conversion.
+   - **Referral Partner (`REF-xxx`)**: Dedicated referral hub, unique public links (`/e/REF-xxx`), and 20% commission tracking.
+   - **Business Relations Closer (`BR-xxx`)**: Atomic lead claiming from unassigned pool, 11-stage pipeline management, dual-tier notes & handover history, client contracts, and milestone invoicing.
+   - **Affiliate Promoter (`PM-xxx`)**: Marketing links (`/e/PM-xxx`), asset collateral hub (multi-image carousels, videos, pitch text), masked enquiry tracking, and 10% affiliate shares.
+   - Role Permission Matrix and Canonical Terminology Glossary.
+
+---
+
+## 🚀 Quick Start for Developers
+
+### Prerequisites
+* Node.js 18+ or 20+
+* Neon PostgreSQL connection string (`DATABASE_URL`)
+
+### Installation & Local Run
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Configure environment
+cp .env.example .env.local
+# Ensure DATABASE_URL and JWT_SECRET are populated in .env.local
+
+# 3. Start local development server
+npm run dev
+```
+
+### Verification & Testing
+```bash
+# Type safety check
+npx tsc --noEmit
+
+# Production build
+npm run build
+
+# Integration tests
+npx tsx src/scripts/test-database-places.ts
+npx tsx src/scripts/test-payouts-and-audit.ts
+```
