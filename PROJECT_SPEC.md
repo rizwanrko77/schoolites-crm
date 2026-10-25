@@ -123,15 +123,15 @@ graph TD
 | **Native Connect Time Input Format** | Converted `preferred_slot_time` from arbitrary text to native `<input type="time">` (dark theme styled) with `form_field_configs` schema updated to `time`, and automatic 12-hour AM/PM formatting across all views | ✅ Complete |
 | **Full-Width Workspace Canvas** | Removed `max-width: 1400px` centering clamp from `.workspace-container`, allowing dashboards and data tables to expand across the full screen width seamlessly | ✅ Complete |
 | **Version Control Sync** | Connected to GitHub (`https://github.com/rizwanrko77/schoolites-crm.git`) on `main` branch with strictly ignored `.env.local` | ✅ Complete |
-| **Phase 5** | Google Places API (New) integration with strict field masking, staging deduplication, and batch lead release | ⏳ Ready to build |
-| **Phase 6** | Deal settlement & bank UTR reference tracking in `/admin/incentives` | ⏳ Ready to build |
+| **Phase 5** | Google Places API (New) integration, CSV import, staging deduplication, and batch allocation | ✅ Complete |
+| **Phase 6** | Contract invoices, snapshotted commission splits, and UTR payout clearance. Only an administrator can mark an invoice cleared. | ✅ Complete |
 
 ---
 
 ## 7. Mobile Responsiveness Architecture
 
 ### Viewport & Containers:
-* **Viewport Config:** Explicitly exported in [`src/app/layout.tsx`](file:///c:/Users/91725/schoolites/src/app/layout.tsx) with `width: device-width, initialScale: 1, maximumScale: 5`.
+* **Viewport Config:** Explicitly exported in [`src/app/layout.tsx`](src/app/layout.tsx) with `width: device-width, initialScale: 1, maximumScale: 5`.
 * **Universal Workspace Container (`.workspace-container`):** Replaced hardcoded paddings (`32px 40px` / `28px 36px`) across Admin, Pre-Sales, Referral, and Business Relations with responsive padding:
   * Desktop (`> 768px`): `padding: 28px 36px; width: 100%;` (full width responsive canvas)
   * Tablet/Mobile (`<= 768px`): `padding: 16px 12px; gap: 16px;`
@@ -216,33 +216,17 @@ graph TD
 
 ---
 
-## 9. Tomorrow's Agenda & Next Steps
+## 9. Shipped follow-ups
 
-### Completed Today:
-* **Zero Pre-filled Fields Policy:** All select inputs default to unselected prompts (`-- Select ... --`), `Country` retained as `India` preset with searchable filter.
-* **Lead Form Draft Auto-save:** In-progress details persist to `localStorage` (`schoolites_lead_form_draft`) across modal close/refresh, auto-purges on successful creation.
-* **Two-Stage Clear Form Action:** Modal header features safe inline `Clear Form` -> `⚠️ Confirm Clear?` confirmation button.
-* **Business Relations Portal Overhaul:** Sectioned sidebar separating `GLOBAL PIPELINE` (Unassigned Pool, Assigned to Me, All Leads) from `MY DIRECT SOURCING` (My Generated Leads, Inbound Enquiries with `/e/[code]` link + Convert workflow, and Marketing Assets hub).
+The old resume notes in this section listed a fixed OTP of `123456` and three unfinished items. Those are done:
 
-### When Resuming Tomorrow Morning:
-1. **Manual Testing & Validation Session:**
-   * **Active Session URLs:** `http://localhost:3000`
-     * Admin: `admin@schoolites.com`
-     * Business Relations (Manager): `vikram.br@schoolites.com`
-     * Referral Partner: `anita.partner@schoolites.com`
-     * Pre-Sales Rep: `rahul.ps@schoolites.com`
-     * OTP: `123456`
-   * **Test Checklist:**
-     * **1. Comprehensive Search:** Verify search matches against all 25 form fields (school name, city, phone, email, ERP brand, notes, owner/manager code). Test search clear (`✕`).
-     * **2. Multi-Select Status Filter:** Test stage checkboxes popover, `All Stages`, custom combinations, `All`/`Clear` links, and active count badges (`Stage (N)`).
-     * **3. Sort Selector & Column Headers:** Verify Created Date (Newest/Oldest) and Last Updated (Most Recent/Oldest), plus clicking table headers (`▲`/`▼`) for in-memory sorting.
-     * **4. Filter Persistence & Reset:** Check that filters persist in `sessionStorage` across modal opens/refreshes, and verify `✕ Clear Filters` button restores default view.
-     * **5. Stage Change Confirmation Alert:** Change stage in `LeadDetailModal`, observe old ➔ new transition chips, verify Closed Deal Governance warning for Won/Lost, test `Cancel` (reverts) and `✓ Confirm Stage Change`.
-     * **6. Role-Based Permissions & Handover:** Verify Partners only see read-only status pills and global remarks; verify Lead Managers see handover attribution for previous BR reps' personal notes.
-2. **Next Roadmap Items:**
-   * **Finalize Extended Status Pipeline:** When ready, add extended statuses (`Demo scheduled`, `Demo completed`, `Following up`, `Onboarding initiated`, `Onboarding completed`) to `src/lib/leadStatuses.ts` and update DB check constraint.
-   * **Phase 5: Outbound Prospecting Pipeline (Google Places API New):** Staging table (`db_businesses`), deduplication against existing leads/enquiries, admin keyword search, and batch allocations.
-   * **Phase 6: Commission & Incentive Settlements:** Clearance modal in `/admin/incentives` with UTR/NEFT bank references.
+* The 11-stage lead pipeline, including demo, follow-up, and onboarding statuses, is in `src/lib/leadStatuses.ts` and the database check constraint.
+* Places search, CSV import, and batch allocation are live.
+* Invoice clearance and UTR payout recording are live. Only an administrator can mark an invoice cleared.
+
+There is no fixed bypass code. Production login emails a one-time code. Setup is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+The lead form still starts blank except Country (`India`), still drafts to `localStorage`, and the Business Relations sidebar is still split into Global Pipeline and My Direct Sourcing.
 
 ---
 

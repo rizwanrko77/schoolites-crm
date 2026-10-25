@@ -21,8 +21,7 @@ Welcome to **Schoolites**, the enterprise sales coordination portal for educatio
 ### 1.1 Secure Login via OTP
 * Navigate to the login portal (e.g. `http://localhost:3000/login` or your deployment domain).
 * Enter your registered corporate email address and click **Send Verification Code**.
-* Check your email for the 6-digit One-Time Password (OTP). Enter the code across the 6 input boxes. The system verifies your code and routes you directly to your role's specialized workspace.
-*(Note: In local staging environments, entering `123456` serves as the test bypass code).*
+* Check your email for the 6-digit One-Time Password (OTP). Enter the code across the 6 input boxes. The system verifies your code and routes you directly to your role's specialized workspace. On a developer machine with no email configured, the code is shown on the login screen instead.
 
 ### 1.2 Enterprise Navigation Shell
 * **Collapsible Desktop Rail**: Click the toggle arrow at the top-right of the sidebar to collapse the navigation into a sleek 72px icon rail, giving your tables and forms maximum horizontal canvas. Click again to expand back to the full 260px view.

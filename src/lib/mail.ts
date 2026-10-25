@@ -1,17 +1,21 @@
-import nodemailer from 'nodemailer';
-
 const GENERIC_FAILURE = 'Could not send the verification email. Try again shortly.';
 
 export function isEmailConfigured(): boolean {
-  return Boolean(process.env.SMTP_HOST || process.env.RESEND_API_KEY);
+  return Boolean(process.env.BREVO_API_KEY);
 }
 
-function fromAddress(): string {
-  return process.env.MAIL_FROM || 'Schoolites <noreply@schoolites.com>';
+function sender(): { name: string; email: string } {
+  const raw = (process.env.MAIL_FROM || 'Schoolites <noreply@schoolites.com>').trim();
+  const named = raw.match(/^(.*?)\s*<([^>]+)>$/);
+  if (named) {
+    const name = named[1].trim().replace(/^["']|["']$/g, '');
+    return { name: name || 'Schoolites', email: named[2].trim() };
+  }
+  return { name: 'Schoolites', email: raw };
 }
 
 /**
- * Sends a login code. Throws EMAIL_NOT_CONFIGURED when no provider is set.
+ * Sends a login code through Brevo. Throws EMAIL_NOT_CONFIGURED when the API key is unset.
  * The code is never written to logs.
  */
 export async function sendOtpEmail(to: string, code: string): Promise<void> {
@@ -22,58 +26,37 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
     'If you did not request this code, you can ignore this email.',
   ].join('\n');
 
-  if (process.env.SMTP_HOST) {
-    const port = Number(process.env.SMTP_PORT || 587);
-    const secure = port === 465 || process.env.SMTP_SECURE === 'true';
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port,
-      secure,
-      auth: process.env.SMTP_USER
-        ? {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS || '',
-          }
-        : undefined,
-    });
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    const missing = new Error('EMAIL_NOT_CONFIGURED');
+    missing.name = 'EmailNotConfiguredError';
+    throw missing;
+  }
 
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': apiKey,
+      accept: 'application/json',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: sender(),
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+    }),
+  });
+
+  if (!res.ok) {
+    let detail = '';
     try {
-      await transporter.sendMail({
-        from: fromAddress(),
-        to,
-        subject,
-        text,
-      });
+      const body = await res.json();
+      if (body && typeof body.message === 'string') detail = `: ${body.message}`;
     } catch {
-      console.error('OTP email delivery failed');
-      throw new Error(GENERIC_FAILURE);
+      detail = '';
     }
-    return;
+    console.error(`OTP email provider rejected the message (${res.status})${detail}`);
+    throw new Error(GENERIC_FAILURE);
   }
-
-  if (process.env.RESEND_API_KEY) {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: fromAddress(),
-        to: [to],
-        subject,
-        text,
-      }),
-    });
-
-    if (!res.ok) {
-      console.error(`OTP email provider rejected the message (${res.status})`);
-      throw new Error(GENERIC_FAILURE);
-    }
-    return;
-  }
-
-  const missing = new Error('EMAIL_NOT_CONFIGURED');
-  missing.name = 'EmailNotConfiguredError';
-  throw missing;
 }

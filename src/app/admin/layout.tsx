@@ -33,37 +33,6 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     loadUser();
   }, [router]);
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--bg-primary)',
-          color: 'var(--text-secondary)',
-          fontSize: '0.95rem',
-        }}
-      >
-        <div style={{ textAlign: 'center' }}>
-          <div
-            style={{
-              width: '36px',
-              height: '36px',
-              border: '3px solid rgba(99, 102, 241, 0.2)',
-              borderTopColor: '#6366f1',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
-              margin: '0 auto 12px',
-            }}
-          />
-          Verifying Admin Access...
-        </div>
-      </div>
-    );
-  }
-
   const navItems: NavItem[] = [
     { id: 'users', label: 'All Users', href: '/admin/users', icon: '👥', badge: 'Core', isActive: pathname.startsWith('/admin/users') },
     { id: 'enquiries', label: 'All Enquiries', href: '/admin/enquiries', icon: '📥', badge: 'Inbound', isActive: pathname.startsWith('/admin/enquiries') },
@@ -78,16 +47,52 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const currentNav = navItems.find((n) => n.isActive);
 
   return (
-    <ActorShell
-      user={currentUser}
-      roleTitle="Admin Center"
-      roleBadgeClass="admin"
-      roleColor="var(--role-admin-color)"
-      navItems={navItems}
-      activeTabTitle={currentNav?.label}
+    <>
+      {loading && <AdminAccessScreen message="Verifying Admin Access..." />}
+      <div hidden={loading}>
+        <ActorShell
+          user={currentUser}
+          roleTitle="Admin Center"
+          roleBadgeClass="admin"
+          roleColor="var(--role-admin-color)"
+          navItems={navItems}
+          activeTabTitle={currentNav?.label}
+        >
+          {children}
+        </ActorShell>
+      </div>
+    </>
+  );
+}
+
+function AdminAccessScreen({ message }: { message: string }) {
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-primary)',
+        color: 'var(--text-secondary)',
+        fontSize: '0.95rem',
+      }}
     >
-      {children}
-    </ActorShell>
+      <div style={{ textAlign: 'center' }}>
+        <div
+          style={{
+            width: '36px',
+            height: '36px',
+            border: '3px solid rgba(99, 102, 241, 0.2)',
+            borderTopColor: '#6366f1',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+            margin: '0 auto 12px',
+          }}
+        />
+        {message}
+      </div>
+    </div>
   );
 }
 
@@ -95,18 +100,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <Suspense
       fallback={
-        <div
-          style={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--bg-primary)',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          Loading Admin Workspace...
-        </div>
+        <>
+          <AdminAccessScreen message="Loading Admin Workspace..." />
+          <div hidden>{children}</div>
+        </>
       }
     >
       <AdminLayoutContent>{children}</AdminLayoutContent>

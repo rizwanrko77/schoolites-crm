@@ -6,9 +6,12 @@ Schoolites is a production-grade, multi-actor B2B Customer Relationship Manageme
 
 ## 📚 Documentation Directory
 
-Complete system documentation is available in the [`docs/`](file:///c:/Users/91725/schoolites/docs) directory:
+Complete system documentation is available in the [`docs/`](docs) directory:
 
-1. **[Developer Guide (`docs/DEVELOPER_GUIDE.md`)](file:///c:/Users/91725/schoolites/docs/DEVELOPER_GUIDE.md)**:
+1. **[Deployment (`docs/DEPLOYMENT.md`)](docs/DEPLOYMENT.md)**:
+   - Production environment variables, first-time database init, and how to run the Node app beside the PHP ERP.
+
+2. **[Developer Guide (`docs/DEVELOPER_GUIDE.md`)](docs/DEVELOPER_GUIDE.md)**:
    - Full-stack technical architecture (Next.js 16 App Router, React 19, TypeScript, Neon Serverless PostgreSQL, S3 Object Storage).
    - Relational database schema, ER diagram, foreign keys, and integrity constraints.
    - Core algorithmic logic: 3-tier commission split engine, closer priority rule, atomic lead grabbing (`HTTP 409`), stage governance, and zero-compute browser auto-sync.
@@ -16,7 +19,7 @@ Complete system documentation is available in the [`docs/`](file:///c:/Users/917
    - Security, stateless OTP authentication, and environment configuration.
    - Build commands and automated test suites.
 
-2. **[User Manual for All Actors (`docs/USER_MANUAL.md`)](file:///c:/Users/91725/schoolites/docs/USER_MANUAL.md)**:
+3. **[User Manual for All Actors (`docs/USER_MANUAL.md`)](docs/USER_MANUAL.md)**:
    - Comprehensive, role-by-role operating instructions.
    - **Root Administrator (`ADM-xxx`)**: User governance, form configurator, central places database, marketing hub, and UTR payout clearances.
    - **Pre-Sales Representative (`PS-xxx`)**: Places calling engine ("New Data" unworked queue, outcome logging, quota requests $\le 10$), promoter pool qualification, and 1-click lead conversion.
@@ -40,7 +43,7 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env.local
-# Ensure DATABASE_URL and JWT_SECRET are populated in .env.local
+# Set DATABASE_URL. For production email and storage, see docs/DEPLOYMENT.md.
 
 # 3. Start local development server
 npm run dev
@@ -55,6 +58,6 @@ npx tsc --noEmit
 npm run build
 
 # Integration tests
+npx tsx src/scripts/test-connection.ts
 npx tsx src/scripts/test-database-places.ts
-npx tsx src/scripts/test-payouts-and-audit.ts
 ```

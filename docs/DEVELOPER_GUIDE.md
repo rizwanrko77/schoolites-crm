@@ -8,7 +8,7 @@
 * **Full-Stack Framework**: [Next.js 16](https://nextjs.org) (App Router, React 19, TypeScript) utilizing Turbopack and React Server Components with selective Client Components for interactive workspaces.
 * **Serverless Relational Database**: [Neon Serverless PostgreSQL](https://neon.tech) via HTTP-based stateless connection pooling (`@neondatabase/serverless`), maintaining complete compatibility with Neon's "scale-to-zero" cost optimization.
 * **Cloud Object Storage**: S3-compatible Neon Object Storage (`storage-bucket`) for marketing collateral (PDF brochures, high-res carousel images, video assets) with automated garbage collection.
-* **Stateless Authentication**: Custom HMAC-signed JWT session cookies with 6-digit numeric One-Time Passwords (OTP) and role-based route/API middleware guards.
+* **Session Authentication**: Random session tokens stored in Postgres, sent as an `httpOnly` cookie, plus a 6-digit email OTP. See [DEPLOYMENT.md](DEPLOYMENT.md) for the mail settings production requires.
 * **Zero-Compute Pipeline Synchronization**: Native browser-level tripartite auto-sync (`usePipelineAutoSync`) listening to window focus, document visibility, and adaptive in-view intervals, avoiding continuous WebSocket server costs.
 * **Prospecting & Ingestion Engine**: Google Places API (New) integration with field masking, paired with a resilient, format-agnostic CSV/TSV importer.
 
@@ -68,7 +68,7 @@ schoolites/
 │   └── scripts/                        # Automated database migrations & test suites
 │       ├── migrate-lead-statuses.ts    # Lead status enum migration script
 │       ├── test-database-places.ts     # 10-phase Places DB integration test suite
-│       └── test-payouts-and-audit.ts   # Payout calculation & audit log test suite
+│       └── test-connection.ts          # Database connectivity check
 ├── PROJECT_SPEC.md                     # Complete living project specification
 └── package.json                        # Project dependencies & scripts
 ```
@@ -157,7 +157,7 @@ Prospects discovered via Google Places API New or CSV/TSV bulk import.
 ## 4. Core Business Logic & Architectural Algorithms
 
 ### 4.1 3-Tier Split Logic & Closer Priority Rule
-When a deal closes (`Won`), the platform executes commission calculations defined in [src/lib/payouts.ts](file:///c:/Users/91725/schoolites/src/lib/payouts.ts):
+When a deal closes (`Won`), the platform executes commission calculations defined in [src/lib/payouts.ts](../src/lib/payouts.ts):
 1. **Snapshotted Rates**: The moment a contract is created or updated upon reaching `Won`, the active `commission_rate` values for the Promoter (`promoter_id`), Lead Owner (`owner_id`), and Lead Manager (`manager_id`) are permanently snapshotted into `lead_contracts`. Future profile rate changes never mutate closed deals.
 2. **Closer Priority Rule (Anti-Double-Dipping)**:
    $$\text{If } \text{owner\_id} == \text{manager\_id} \implies \text{owner\_rate} = 0.00\% \text{ and } \text{manager\_rate} = \text{snapshotted Closer Rate (10\%)}$$
@@ -186,14 +186,14 @@ Prospect distribution follows a two-tier queue:
 * **Admin Allocation Modes**:
   1. *1-Click Auto Fulfill*: Automatically assigns top $N$ fresh records matching the actor's requested city.
   2. *Visual Select & Allocate*: Pre-filters the Fresh Pool by the requested city, engages an allocation ribbon with live counter and `Auto-Select Top N`, and confirms allocation via `PATCH /api/admin/places/requests`.
-* **Lead Conversion Attribution**: Clicking "Convert to Lead ↗" initializes [CreateLeadModal.tsx](file:///c:/Users/91725/schoolites/src/components/CreateLeadModal.tsx) with school name, city, and phone. Upon submission, the prospect record is marked `converted_to_lead` with `converted_lead_id` linked, and the outreach actor is recorded as the `owner_id`.
+* **Lead Conversion Attribution**: Clicking "Convert to Lead" initializes [CreateLeadModal.tsx](../src/components/CreateLeadModal.tsx) with school name, city, and phone. Upon submission, the prospect record is marked `converted_to_lead` with `converted_lead_id` linked, and the outreach actor is recorded as the `owner_id`. The caller must be assigned that place, or be an admin.
 
 ---
 
 ## 5. Security & Authentication Architecture
 
-* **Stateless Session Cookies**: JWTs signed with `JWT_SECRET` stored in `httpOnly`, `SameSite=Lax`, `secure` (in production) cookies.
-* **OTP Verification**: Eliminates password-related vulnerabilities. 6-digit OTPs are generated and validated against short-lived expirations. (In local development, `DEV_AUTO_OTP=123456` enables rapid developer testing).
+* **Session Cookies**: A random 32-byte token is stored in the `sessions` table and in an `httpOnly`, `SameSite=Lax` cookie. The cookie is `Secure` when `NODE_ENV` is `production`. There is no JWT and no `JWT_SECRET`.
+* **OTP Verification**: A 6-digit code is emailed through Brevo and expires in 10 minutes. Five wrong attempts burn the code. Sends are limited to five per 15 minutes per address, with 60 seconds between sends. In local development, when `BREVO_API_KEY` is unset, the login screen shows the code. Production will not issue a code until email is configured. See [DEPLOYMENT.md](DEPLOYMENT.md).
 * **Role-Based Guards**:
   * Every API route verifies the session user and role via `getSessionUser()`.
   * External actors (Promoters) querying `/api/leads` receive masked contact details (`spoc_phone: '987*****21'`) to prevent client disintermediation. Direct requests to `/api/leads/[id]` from unauthorized roles return `403 Forbidden`.
@@ -203,19 +203,16 @@ Prospect distribution follows a two-tier queue:
 
 ## 6. Environment Configuration Reference
 
-The application requires the following environment variables (defined in `.env.local` for local execution, or set in production deployment environments):
+Names, which ones are required, and how to run the app in production are in [DEPLOYMENT.md](DEPLOYMENT.md). The variables the code actually reads are:
 
-| Variable | Description | Required | Example |
-| :--- | :--- | :--- | :--- |
-| `DATABASE_URL` | Neon PostgreSQL pooled connection URI | **Yes** | `postgresql://user:pass@ep-xyz-pooler.region.neon.tech/neondb?sslmode=require` |
-| `JWT_SECRET` | 32+ character cryptographic secret for session JWTs | **Yes** | `f6a8b29c4d1e0...` |
-| `GOOGLE_PLACES_API_KEY` | Google Places API (New) enabled Cloud API key | Optional | `AIzaSyAiMVW...` |
-| `STORAGE_BUCKET` | Neon S3-compatible bucket name for asset uploads | Optional | `storage-bucket` |
-| `STORAGE_REGION` | Object storage region | Optional | `ap-southeast-1` |
-| `STORAGE_ENDPOINT` | Object storage custom endpoint URI | Optional | `https://s3.ap-southeast-1.amazonaws.com` |
-| `STORAGE_ACCESS_KEY` | S3 API Access Key ID | Optional | `AKIA...` |
-| `STORAGE_SECRET_KEY` | S3 API Secret Access Key | Optional | `wJalrXUtnFEMI...` |
-| `DEV_AUTO_OTP` | Local development bypass OTP | Dev Only | `123456` |
+| Variable | Required |
+| :--- | :--- |
+| `DATABASE_URL` | Yes |
+| `BREVO_API_KEY`, `MAIL_FROM` | Yes in production. `MAIL_FROM` must be a sender verified in Brevo |
+| `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Yes if marketing files are uploaded. `AWS_REGION` and `AWS_BUCKET_NAME` have defaults |
+| `GOOGLE_PLACES_API_KEY` | Only for admin Places search |
+
+`JWT_SECRET`, `AUTH_SECRET`, `DEV_AUTO_OTP`, `NEXT_PUBLIC_APP_URL`, and the `STORAGE_*` names are not read.
 
 ---
 
@@ -238,8 +235,6 @@ npx tsc --noEmit
 Run standalone integration test scripts using `tsx`:
 ```bash
 # Test Places Database ingestion, allocation & lifecycle
+npx tsx src/scripts/test-connection.ts
 npx tsx src/scripts/test-database-places.ts
-
-# Test 3-tier commission payout calculations & audit logging
-npx tsx src/scripts/test-payouts-and-audit.ts
 ```
