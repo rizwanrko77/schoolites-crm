@@ -295,21 +295,22 @@ export default function LoginPage() {
               {isLoading ? 'Generating Code...' : 'Send Verification Code →'}
             </button>
 
-            {/* Quick Helper for initial testing */}
-            <div
-              style={{
-                marginTop: '24px',
-                padding: '12px',
-                borderRadius: 'var(--radius-md)',
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px dashed var(--border-subtle)',
-                textAlign: 'center',
-                fontSize: '0.8rem',
-                color: 'var(--text-muted)',
-              }}
-            >
-              Default Seeded Admin: <strong style={{ color: 'var(--text-primary)' }}>admin@schoolites.com</strong>
-            </div>
+            {process.env.NODE_ENV !== 'production' && (
+              <div
+                style={{
+                  marginTop: '24px',
+                  padding: '12px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px dashed var(--border-subtle)',
+                  textAlign: 'center',
+                  fontSize: '0.8rem',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Default Seeded Admin: <strong style={{ color: 'var(--text-primary)' }}>admin@schoolites.com</strong>
+              </div>
+            )}
           </form>
         ) : (
           /* STEP 2: 6-Digit OTP Form */
