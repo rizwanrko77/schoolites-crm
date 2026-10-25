@@ -99,12 +99,7 @@ function AdminAccessScreen({ message }: { message: string }) {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense
-      fallback={
-        <>
-          <AdminAccessScreen message="Loading Admin Workspace..." />
-          <div hidden>{children}</div>
-        </>
-      }
+      fallback={<AdminAccessScreen message="Loading Admin Workspace..." />}
     >
       <AdminLayoutContent>{children}</AdminLayoutContent>
     </Suspense>
