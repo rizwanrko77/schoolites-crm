@@ -4,9 +4,7 @@ This is the production setup for the Next.js app in this folder. The school PHP 
 
 ## Push changes to Vercel
 
-Production is the Vercel project `leads`. Day-to-day deploys come from the `main` branch of `TeamFriends/schoolites-leads` on Bitbucket. Vercel starts a new production deployment when that branch moves.
-
-Do this from this directory:
+Production is the Vercel project `leads`. The public site is [https://leads.schoolites.com](https://leads.schoolites.com). This folder is already linked (`.vercel/project.json`). Vercel does not deploy when Bitbucket `main` moves. Ship with the Vercel CLI from this directory.
 
 1. Keep secrets out of git. `.env.local` is ignored. Never `git add` it.
 2. See what will ship:
@@ -16,26 +14,25 @@ git status
 git diff
 ```
 
-3. Commit, then push `main`:
+3. Commit:
 
 ```bash
 git add <the files you changed>
 git commit -m "Why this change is needed"
-git push origin main
 ```
 
-4. Open the Vercel project **leads** → **Deployments**. Wait until the new deployment for that commit says **Ready**. The site keeps serving the previous deployment until then.
-5. Open the production URL and sign in with `admin@schoolites.com`. A code should arrive from Brevo.
-
-Changing only an environment variable does not redeploy. In **Settings → Environment Variables**, update **Production**, then open **Deployments** and redeploy the latest production deployment.
-
-If `git push` cannot authenticate, deploy the current directory with the Vercel CLI from a machine that is already logged in and linked (`.vercel/project.json` is present):
+4. Deploy production. The CLI must already be logged in (`npx vercel login`). `--yes` uses the linked project and skips the prompts.
 
 ```bash
 npx vercel deploy --prod --yes
 ```
 
-That upload does not update Bitbucket. Push `main` as well when credentials are available, so the next Git deploy is not an older commit.
+5. Wait until the command prints `readyState: READY` and aliases `https://leads.schoolites.com`. Until then the previous deployment stays live.
+6. Open [https://leads.schoolites.com/login](https://leads.schoolites.com/login) and sign in with `admin@schoolites.com`. A code should arrive from Brevo.
+
+Changing only an environment variable does not redeploy. In the Vercel project **leads** → **Settings → Environment Variables**, update **Production**, then run `npx vercel deploy --prod --yes` again.
+
+`git push origin main` updates Bitbucket only. It does not update the site. Push it when you want the remote repo to match what you deployed. Connecting the Bitbucket repo with `npx vercel git connect` would make later pushes deploy on their own. That is not set up today.
 
 ## Requirements
 
