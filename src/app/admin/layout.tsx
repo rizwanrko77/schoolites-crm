@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import ActorShell, { NavItem } from '@/components/ActorShell';
+import { AdminSessionContext } from './admin-session';
 
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -47,7 +48,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const currentNav = navItems.find((n) => n.isActive);
 
   return (
-    <>
+    <AdminSessionContext.Provider value={!loading && Boolean(currentUser)}>
       {loading && <AdminAccessScreen message="Verifying Admin Access..." />}
       <div hidden={loading}>
         <ActorShell
@@ -61,7 +62,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           {children}
         </ActorShell>
       </div>
-    </>
+    </AdminSessionContext.Provider>
   );
 }
 

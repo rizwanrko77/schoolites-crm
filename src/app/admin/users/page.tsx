@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAdminReady } from '../admin-session';
 
 interface User {
   id: string;
@@ -37,7 +38,9 @@ export default function AdminUsersPage() {
     referral: 0,
     business_relations: 0,
   });
+  const adminReady = useAdminReady();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
 
@@ -74,28 +77,33 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const queryParams = new URLSearchParams();
       if (roleFilter !== 'all') queryParams.append('role', roleFilter);
       if (search.trim()) queryParams.append('search', search.trim());
 
       const res = await fetch(`/api/admin/users?${queryParams.toString()}`);
-      if (!res.ok) throw new Error('Failed to load users');
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoadError(data.error || 'Failed to load users');
+        return;
+      }
       setUsers(data.users || []);
       if (data.counts) setCounts(data.counts);
-    } catch (err: any) {
-      console.error(err);
+    } catch {
+      setLoadError('Failed to load users');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    if (!adminReady) return;
     const debounce = setTimeout(() => {
       fetchUsers();
     }, 250);
     return () => clearTimeout(debounce);
-  }, [search, roleFilter]);
+  }, [search, roleFilter, adminReady]);
 
   const handleConfirmStatusChange = async () => {
     if (!confirmStatusUser) return;
@@ -205,6 +213,9 @@ export default function AdminUsersPage() {
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
             Control user permissions, generate unique user codes, and monitor team access
           </p>
+          {loadError && (
+            <p style={{ color: '#fca5a5', fontSize: '0.88rem', marginTop: '8px' }}>{loadError}</p>
+          )}
         </div>
 
         <button
