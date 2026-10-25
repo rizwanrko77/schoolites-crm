@@ -2,6 +2,41 @@
 
 This is the production setup for the Next.js app in this folder. The school PHP ERP is a separate application. Do not deploy this app as files under the PHP document root.
 
+## Push changes to Vercel
+
+Production is the Vercel project `leads`. Day-to-day deploys come from the `main` branch of `TeamFriends/schoolites-leads` on Bitbucket. Vercel starts a new production deployment when that branch moves.
+
+Do this from this directory:
+
+1. Keep secrets out of git. `.env.local` is ignored. Never `git add` it.
+2. See what will ship:
+
+```bash
+git status
+git diff
+```
+
+3. Commit, then push `main`:
+
+```bash
+git add <the files you changed>
+git commit -m "Why this change is needed"
+git push origin main
+```
+
+4. Open the Vercel project **leads** → **Deployments**. Wait until the new deployment for that commit says **Ready**. The site keeps serving the previous deployment until then.
+5. Open the production URL and sign in with `admin@schoolites.com`. A code should arrive from Brevo.
+
+Changing only an environment variable does not redeploy. In **Settings → Environment Variables**, update **Production**, then open **Deployments** and redeploy the latest production deployment.
+
+If `git push` cannot authenticate, deploy the current directory with the Vercel CLI from a machine that is already logged in and linked (`.vercel/project.json` is present):
+
+```bash
+npx vercel deploy --prod --yes
+```
+
+That upload does not update Bitbucket. Push `main` as well when credentials are available, so the next Git deploy is not an older commit.
+
 ## Requirements
 
 - Node.js 20 or newer
