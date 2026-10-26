@@ -61,3 +61,8 @@ npm run build
 npx tsx src/scripts/test-connection.ts
 npx tsx src/scripts/test-database-places.ts
 ```
+
+---
+
+## 🔗 Repository Upstream
+- **Bitbucket Remote**: `git@bitbucket.org:TeamFriends/schoolites-leads.git`
