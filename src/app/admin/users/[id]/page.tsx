@@ -156,8 +156,9 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
   // Selected enquiry for inspection modal
   const [selectedEnquiry, setSelectedEnquiry] = useState<EnquiryItem | null>(null);
 
-  // Status toggle state
+  // Status toggle state & confirmation modal
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isStatusConfirmOpen, setIsStatusConfirmOpen] = useState(false);
 
   // Payout action modal state
   const [selectedPayout, setSelectedPayout] = useState<ActorPayoutItem | null>(null);
@@ -319,11 +320,17 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update user status');
 
-      setUser({ ...user, is_active: !user.is_active });
-      setToastMsg(`User account marked as ${!user.is_active ? 'Active' : 'Inactive'}`);
-      setTimeout(() => setToastMsg(''), 3000);
+      const nextActive = !user.is_active;
+      setUser({ ...user, is_active: nextActive });
+      setIsStatusConfirmOpen(false);
+      setToastMsg(
+        nextActive
+          ? `✓ Account access restored for ${user.name} (${user.user_code}). Account is now Active.`
+          : `⚠️ Account deactivated for ${user.name} (${user.user_code}). Access is now Suspended.`
+      );
+      setTimeout(() => setToastMsg(''), 4000);
     } catch (err: any) {
-      alert(err.message);
+      alert(err.message || 'Error updating user status');
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -408,7 +415,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={handleToggleStatus}
+            onClick={() => setIsStatusConfirmOpen(true)}
             disabled={isUpdatingStatus}
             style={{
               display: 'inline-flex',
@@ -1342,7 +1349,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
               <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Account State</label>
               <div style={{ marginTop: '8px' }}>
                 <button
-                  onClick={handleToggleStatus}
+                  onClick={() => setIsStatusConfirmOpen(true)}
                   disabled={isUpdatingStatus}
                   className={user.is_active ? 'btn-secondary' : 'btn-primary'}
                   style={{ padding: '8px 18px', fontSize: '0.85rem' }}
@@ -1350,6 +1357,113 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                   {user.is_active ? 'Deactivate Member Account' : 'Reactivate Member Account'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STATUS CHANGE CONFIRMATION MODAL */}
+      {isStatusConfirmOpen && user && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(5, 8, 16, 0.78)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '20px',
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              maxWidth: '460px',
+              width: '100%',
+              padding: '28px',
+              border: user.is_active ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+              boxShadow: user.is_active
+                ? '0 12px 40px rgba(239, 68, 68, 0.15)'
+                : '0 12px 40px rgba(16, 185, 129, 0.15)',
+              background: '#0e1726',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '12px',
+                  background: user.is_active ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.4rem',
+                }}
+              >
+                {user.is_active ? '⚠️' : '✅'}
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>
+                  {user.is_active ? 'Deactivate Member Account?' : 'Reactivate Member Account?'}
+                </h3>
+                <span className="user-code-pill" style={{ color: '#ffffff', fontSize: '0.78rem' }}>
+                  {user.user_code}
+                </span>
+              </div>
+            </div>
+
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '24px' }}>
+              {user.is_active ? (
+                <>
+                  Are you sure you want to deactivate access for <strong style={{ color: '#ffffff' }}>{user.name}</strong>?
+                  They will be <span style={{ color: '#f87171', fontWeight: 600 }}>immediately blocked</span> from requesting OTPs and logging into the Schoolites portal.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to restore access for <strong style={{ color: '#ffffff' }}>{user.name}</strong>?
+                  They will be able to receive OTPs and access their dashboard again.
+                </>
+              )}
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setIsStatusConfirmOpen(false)}
+                className="btn-secondary"
+                disabled={isUpdatingStatus}
+              >
+                Cancel
+              </button>
+              <button
+                id="confirm-user-status-btn"
+                type="button"
+                onClick={handleToggleStatus}
+                disabled={isUpdatingStatus}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 'var(--radius-md)',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  color: '#ffffff',
+                  background: user.is_active
+                    ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                    : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  boxShadow: user.is_active
+                    ? '0 4px 14px rgba(239, 68, 68, 0.4)'
+                    : '0 4px 14px rgba(16, 185, 129, 0.4)',
+                }}
+              >
+                {isUpdatingStatus
+                  ? 'Updating...'
+                  : user.is_active
+                  ? 'Yes, Deactivate Account'
+                  : 'Yes, Reactivate Account'}
+              </button>
             </div>
           </div>
         </div>
