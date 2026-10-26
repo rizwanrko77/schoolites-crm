@@ -1504,38 +1504,40 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                 />
               </div>
 
-              {/* Places Database Access Toggle */}
-              <div
-                style={{
-                  padding: '12px 14px',
-                  background: editFormData.has_database_access ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                  border: editFormData.has_database_access ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onClick={() => setEditFormData((f) => ({ ...f, has_database_access: !f.has_database_access }))}
-              >
-                <div>
-                  <div style={{ fontSize: '0.86rem', fontWeight: 600, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>🏢</span>
-                    <span>Grant Places Database Access</span>
+              {/* Places Database Access Toggle (Pre-Sales & Referral only) */}
+              {(user?.role === 'pre_sales' || user?.role === 'referral') && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    background: editFormData.has_database_access ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                    border: editFormData.has_database_access ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onClick={() => setEditFormData((f) => ({ ...f, has_database_access: !f.has_database_access }))}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 600, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🏢</span>
+                      <span>Grant Places Database Access</span>
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Gives member access to the discovery queue & Google Places outreach pipeline.
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Gives member access to the discovery queue & Google Places outreach pipeline.
-                  </div>
+                  <input
+                    type="checkbox"
+                    checked={editFormData.has_database_access}
+                    onChange={(e) => setEditFormData({ ...editFormData, has_database_access: e.target.checked })}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ width: '18px', height: '18px', accentColor: '#38bdf8', cursor: 'pointer' }}
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={editFormData.has_database_access}
-                  onChange={(e) => setEditFormData({ ...editFormData, has_database_access: e.target.checked })}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ width: '18px', height: '18px', accentColor: '#38bdf8', cursor: 'pointer' }}
-                />
-              </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                 <button

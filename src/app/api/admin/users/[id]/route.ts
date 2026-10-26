@@ -243,9 +243,12 @@ export async function PATCH(
     const commissionRate = body.commission_rate !== undefined && body.commission_rate !== null && body.commission_rate !== ''
       ? parseFloat(body.commission_rate)
       : current.commission_rate;
-    const hasDatabaseAccess = body.has_database_access !== undefined
-      ? (body.has_database_access === true || body.has_database_access === 'true')
-      : current.has_database_access;
+    const isEligibleForDb = current.role === 'pre_sales' || current.role === 'referral';
+    const hasDatabaseAccess = isEligibleForDb
+      ? (body.has_database_access !== undefined
+          ? (body.has_database_access === true || body.has_database_access === 'true')
+          : current.has_database_access)
+      : false;
 
     if (!name) {
       return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });

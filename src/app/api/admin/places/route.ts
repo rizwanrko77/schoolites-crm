@@ -81,11 +81,11 @@ export async function GET(req: NextRequest) {
       ORDER BY city ASC;
     `;
 
-    // Users with DB access for assignment dropdown
+    // Users with DB access for assignment dropdown (pre_sales & referral only)
     const dbUsers = await sql`
       SELECT id, user_code, name, role 
       FROM users 
-      WHERE has_database_access = TRUE AND is_active = TRUE
+      WHERE has_database_access = TRUE AND is_active = TRUE AND role IN ('pre_sales', 'referral')
       ORDER BY name ASC;
     `;
 
@@ -203,9 +203,9 @@ export async function POST(req: NextRequest) {
     }
 
     const targetUser = userRes[0];
-    if (!targetUser.has_database_access) {
+    if (!targetUser.has_database_access || (targetUser.role !== 'pre_sales' && targetUser.role !== 'referral')) {
       return NextResponse.json(
-        { error: `${targetUser.name} does not have Places Database Access enabled. Enable it in their user profile first.` },
+        { error: `${targetUser.name} is not eligible for Places Database access (Pre-Sales and Referral roles only).` },
         { status: 400 }
       );
     }

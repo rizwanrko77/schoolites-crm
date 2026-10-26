@@ -40,11 +40,11 @@ The Root Administrator exercises complete operational oversight over company use
   1. Click **+ Add User** in the top-right corner.
   2. Enter the member's full name, corporate email address, and select their role (`Pre-Sales`, `Referral Partner`, `Business Relations`, `Promoter`, or `Admin`).
   3. **Commission Setting**: Choose **Role Default %** (e.g., 10% for PS/BR, 20% for Referral) or select **Custom %** to specify an agreed rate.
-  4. **Database Access Toggle**: Turn on `Enable Places Database Access` if this team member is participating in cold outreach prospecting.
+  4. **Database Access Toggle (Pre-Sales & Referral only)**: Turn on `Grant Places Database Access` if this Pre-Sales or Referral team member is participating in cold outreach prospecting (hidden for Admin, Business Relations, and Promoter roles).
   5. Click **Create User**. The system automatically generates their sequential identifier (e.g., `PS-108`).
 * **Editing Profiles & Commission Adjustments**:
   1. Click the member row or **View Profile**.
-  2. Click **✏️ Edit Profile & Incentive Settings** to modify their name, status (`active` vs `deactivated`), commission percentage, or database access.
+  2. Click **✏️ Edit Profile & Incentive Settings** to modify their name, status (`active` vs `deactivated`), commission percentage, or database access (visible for Pre-Sales and Referral roles).
   3. All rate adjustments are immutably logged in the audit trail.
 * **Commission Payout Clearances (`/admin/users/[id]`)**:
   1. Open the member's profile and switch to the **Commission Payouts** tab.

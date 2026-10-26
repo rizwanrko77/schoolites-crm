@@ -107,7 +107,8 @@ export async function POST(req: NextRequest) {
       ? parseFloat(body.commission_rate)
       : defaultRate;
 
-    const hasDatabaseAccess = body.has_database_access === true || body.has_database_access === 'true';
+    const isEligibleForDb = role === 'pre_sales' || role === 'referral';
+    const hasDatabaseAccess = isEligibleForDb && (body.has_database_access === true || body.has_database_access === 'true');
 
     // Insert new user
     const insertRes = await sql`
