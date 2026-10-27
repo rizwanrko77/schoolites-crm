@@ -64,5 +64,8 @@ npx tsx src/scripts/test-database-places.ts
 
 ---
 
-## 🔗 Repository Upstream
+## 🔗 Repository Upstream & Dual-Sync
 - **Bitbucket Remote**: `git@bitbucket.org:TeamFriends/schoolites-leads.git`
+- **GitHub Remote**: `https://github.com/rizwanrko77/schoolites-crm.git`
+- **Dual-Push Configuration**: Both `bitbucket` and `origin` remotes are configured with dual push URLs. Running `git push` automatically synchronizes changes across both Bitbucket and GitHub simultaneously.
+
