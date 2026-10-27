@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import PricingModal from './PricingModal';
 
 export interface NavItem {
   id: string;
@@ -50,6 +51,9 @@ export default function ActorShell({
   // Mobile drawer state
   const [isMobile, setIsMobile] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  // Global Pricing Modal State
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
 
   // My Account Profile Menu State
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -483,6 +487,39 @@ export default function ActorShell({
 
           {/* Right: Action Buttons + "My Account" Profile Menu */}
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '14px', flexShrink: 0 }}>
+            {/* Global Pricing Button */}
+            <button
+              type="button"
+              onClick={() => setIsPricingModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: isMobile ? '5px 10px' : '6px 14px',
+                borderRadius: '20px',
+                background: 'rgba(99, 102, 241, 0.12)',
+                border: '1px solid rgba(99, 102, 241, 0.35)',
+                color: '#c7d2fe',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)';
+                e.currentTarget.style.borderColor = '#818cf8';
+                e.currentTarget.style.color = '#ffffff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)';
+                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.35)';
+                e.currentTarget.style.color = '#c7d2fe';
+              }}
+            >
+              <span style={{ fontSize: '0.9rem' }}>🏷️</span>
+              <span>Pricing</span>
+            </button>
+
             {/* Action Buttons (e.g. + Create Lead) */}
             {headerActions && (
               <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -661,6 +698,13 @@ export default function ActorShell({
           {children}
         </main>
       </div>
+
+      {/* Global Pricing Modal for Actors and Admins */}
+      <PricingModal
+        isOpen={isPricingModalOpen}
+        onClose={() => setIsPricingModalOpen(false)}
+        isAdmin={user?.role === 'admin'}
+      />
     </div>
   );
 }

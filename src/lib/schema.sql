@@ -436,3 +436,32 @@ ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS fulfilled_by UUID REFERENCES users(id);
 ALTER TABLE db_pipeline_requests ADD COLUMN IF NOT EXISTS fulfilled_count INT DEFAULT 0;
 
+-- Pricing Module Tables
+CREATE TABLE IF NOT EXISTS pricing_variables (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key VARCHAR(64) UNIQUE NOT NULL,
+    label VARCHAR(128) NOT NULL,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pricing_variables_key ON pricing_variables(key);
+
+CREATE TABLE IF NOT EXISTS pricing_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(128) DEFAULT 'Standard Pricing Template',
+    content TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS pricing_country_rates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    country VARCHAR(128) UNIQUE NOT NULL,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pricing_country_rates_country ON pricing_country_rates(country);
+
+

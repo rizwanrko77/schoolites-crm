@@ -816,6 +816,146 @@ CREATE TABLE IF NOT EXISTS db_pipeline_requests (
 * **Actor Inspection Drawer**: Actors can click `🔍 Inspect` on any prospect card to view comprehensive metadata (full address, rating, reviews, website, Google Maps, notes history) and trigger 1-click lead conversion.
 * **API Key Security**: The Google Places API Key is managed securely via `GOOGLE_PLACES_API_KEY` in `.env.local`. Direct UI input fields were removed to maintain enterprise credential safety.
 
+---
+
+## 21. Admin Users Directory Multi-Select Role & Active Status Filters
+
+### Architecture & UI:
+* **Dropdown Popover Component**: Replaced horizontal single-select role tabs in `/admin/users` with an accessible custom multi-select popover, matching the design pattern established in `LeadTableControls`.
+* **Dynamic Trigger State**:
+  * Shows `All Roles ▼` when all roles or no specific filters are checked.
+  * Displays role label directly when 1 role is selected (e.g. `Pre-Sales ▼`).
+  * Displays count badge `Roles (N) ▼` with indigo accent glow when a multi-role subset is active.
+* **Popover Checklist & Quick Actions**:
+  * Includes `Select All` and `Clear` quick buttons.
+  * Checkboxes for each role (`Pre-Sales`, `Referral`, `Promoters`, `Business Relations`, `Admins`) accompanied by role counts and glowing brand color indicators (`--role-*-color`).
+  * Closes gracefully on outside click and `Escape` keypress.
+* **Active Status Dropdown Filter**:
+  * Positioned alongside the role dropdown: `[ 👥 Roles (N) ▼ ] [ 🟢 Active ▼ ]`.
+  * Options: `All Statuses` (`all`), `Active` (`active`), `Inactive` (`inactive`), defaulting to `active`.
+  * Renders live counts for each option and status badges (`🟢`, `🔴`, `🔘`).
+  * Dismisses smoothly on click-outside and `Escape`.
+* **Compact Role & Prefix Overview Table**:
+  * Replaced the bulky 5-card grid with a space-saving summary table collapsed by default (`Show Table ▼` toggle).
+  * Displays Role Type (with brand indicators), Code Prefix (`ADM-`, `PS-`, `REF-`, `PM-`, `BR-`), Active Access (`● N`), Inactive count, and Total Users when expanded.
+  * Includes 1-click `Filter →` quick actions per role that sync with the main table and multi-select filter.
+* **Backend API Compatibility (`/api/admin/users`)**:
+  * Supports comma-separated multi-role parameter `?roles=pre_sales,referral` while retaining backward-compatibility with single `?role=`.
+  * Supports `?status=active|inactive|all`.
+  * Returns `roleStats` alongside global `counts` so role-level active and inactive counters reflect true organization statistics regardless of active query filters.
+
+---
+
+## 22. Dynamic Pricing Engine & Regional Rate Matrix Module
+
+### Overview:
+A unified commercial pricing reference and governance engine enabling administrators to configure dynamic contract variables, draft standardized rate templates, and sync country-specific rate matrices via CSV feeds. All actors have one-click access to an interpolated country rate modal from the portal header.
+
+### 22.1 Actor Experience (All Roles):
+* **Global Header Button**: A sleek `🏷️ Pricing` button in [`ActorShell.tsx`](file:///c:/Users/91725/schoolites/src/components/ActorShell.tsx) accessible by Admins, Pre-Sales, Referral Partners, Promoters, and Business Relations.
+* **Admin Navigation Integration**: `🏷️ Pricing Engine` added to [`src/app/admin/layout.tsx`](file:///c:/Users/91725/schoolites/src/app/admin/layout.tsx). Static development milestone tags (`Core`, `Phase 4`, `V1`, `Active`, etc.) were removed from all admin navigation items to provide a clean, uncluttered production sidebar.
+* **Actor Pricing Modal (`PricingModal.tsx`)**:
+  * **Searchable Country Select**: Instant fuzzy search dropdown to select target countries.
+  * **Dynamic Text Interpolation**: Automatically replaces all template tokens (`{{country}}`, `{{currency}}`, `{{min_rate}}`, `{{max_rates}}`, `{{min_contract_duration}}`, `{{min_contract_amount}}`, or custom variables) with live country-specific matrix values.
+  * **Quick Copy Action**: 1-click `📋 Copy Terms` button to copy the rendered contractual clauses to the clipboard.
+  * **Admin Deep-Link**: Includes a direct link (`⚙️ Manage Pricing Engine →`) for administrators.
+
+### 22.2 Administrator Engine (`/admin/pricing`):
+* **Tab 1: Direct Rate Matrix Spreadsheet Editor**:
+  * **View Mode by Default**: The rate matrix renders in read-only mode by default, displaying clean formatted text with no risk of accidental keystrokes, cell overwrites, or accidental deletions while searching or browsing.
+  * **Explicit Edit Mode (`✏️ Edit Table`)**: Clicking `✏️ Edit Table` unlocks in-place cell editing, enables `+ Add Country Row`, `📋 Paste from Excel / Sheets`, and row delete actions.
+  * **Direct In-Cell Copy-Paste**: While in edit mode, admins can focus any cell and press `Ctrl + V`. Native parser intercepts Tab-Separated Values (TSV) from Excel or Google Sheets, populates cells rightward/downward, and automatically appends rows if pasted data exceeds current table length.
+  * **Smart Header Auto-Detection**: The paste parser automatically detects and filters out header rows (e.g. lines starting with `Country *`, `Country`, or containing variable tags like `{{...}}`), ensuring only clean country data rows are ingested even if headers were copied from spreadsheets.
+  * **Spreadsheet Paste Modal (`📋 Paste from Excel / Sheets`)**: Alternative dedicated paste helper with column order guide (`Country, Currency, Min Rate, ...`), multi-row visual preview, and toggle between *Append to existing* or *Replace entire matrix*.
+  * **Safe Row Deletion Confirmation Modal**: Clicking `✕` on any country row in edit mode opens a dedicated confirmation dialog requiring explicit confirmation before the row is removed from the draft matrix.
+  * **Cancel & Revert Actions**: Includes an `Exit Edit Mode` / `↺ Discard & Exit` button to instantly wipe unsaved drafts and revert back to clean database values.
+  * **Atomic Save**: `💾 Save All Changes` persists all edited and pasted country records to PostgreSQL `JSONB` in a single batch and returns to View Mode upon success.
+  * **1-Click Backup**: `⬇️ Export Backup (CSV)` allows offline backups on demand without requiring CSV uploads.
+* **Tab 2: Create Variables**:
+  * Define and manage dynamic pricing keys (`pricing_variables`).
+  * Auto-sanitizes keys into slug format (`[a-z0-9_]`).
+  * Clickable token chips (`{{key}}`) that copy placeholders to clipboard.
+  * Clearly distinguishes per-student pricing (`min_rate`, `max_rates`) vs. institutional contract commitment floors (`min_contract_amount`).
+  * Primary lookup key (`country`) is protected from accidental deletion.
+  * **Safe Column Deletion Confirmation Modal**: Deleting a column/variable (either via the `✕` icon on the Rate Matrix table header in Tab 1 or the `🗑️ Delete Column` action in Tab 2) opens a dedicated confirmation modal detailing the exact variable token and warning that it cannot be undone, preventing accidental deletion.
+* **Tab 3: Rate Template Editor & Live Preview**:
+  * Dual-pane drafting environment (`pricing_templates`).
+  * Left Pane: Title input, quick-insert variable chips, and clause textarea.
+  * Right Pane: Real-time actor preview with interactive country selector simulating real-world interpolation.
+  * Commercial template highlights both the per-student rate baseline and the whole-institution minimum commitment floor.
+
+### 22.3 Database Architecture:
+* `pricing_variables`: `id UUID`, `key VARCHAR(64) UNIQUE`, `label VARCHAR(128)`, `sort_order INT`.
+* `pricing_templates`: `id UUID`, `title VARCHAR(128)`, `content TEXT`, `is_active BOOLEAN`.
+* `pricing_country_rates`: `id UUID`, `country VARCHAR(128) UNIQUE`, `data JSONB` (stores arbitrary dynamic variable key-value pairs without requiring schema migrations).
+
+---
+
+## 23. Public Institutional Enquiry Portal Architecture (`/e/[code]`)
+
+### Overview:
+A high-converting, mobile-responsive public onboarding gateway designed for schools and institutional decision-makers. It balances institutional brand authority with an effortless enquiry experience while preserving multi-actor referral tracking behind the scenes.
+
+### 23.1 Asymmetric Layout & Grounded Design:
+* **Two-Column Responsive Grid (`.enquiry-split-layout`)**:
+  * **Desktop / Laptop (`min-width: 960px`)**: Side-by-side asymmetric layout. The left details section rests directly on the background canvas ground without an enclosing card wrapper, eliminating nested card visual noise. The right interactive enquiry form is framed as a crisp, focused glass card.
+  * **Mobile / Tablet**: Gracefully collapses into a single-column vertical flow (Platform overview and proof metrics on top, Enquiry form directly below).
+* **Zero Outbound Links / Zero External Navigation**: Keeps prospective schools 100% focused on submission without redirecting away to marketing subdomains or third-party sites.
+
+### 23.2 Silent Multi-Actor Attribution:
+* **Representative Identity Decoupling**: Representative names and actor codes (`PM-xxx`, `REF-xxx`, `PS-xxx`) are completely hidden from public view in both the form header and the submission confirmation screen.
+* **Database Lead Credit Preservation**: The referral code is retained in the route parameter and automatically submitted (`owner_code: code`), preserving pipeline commission, pre-sales ownership, and partner payout attribution.
+
+### 23.3 Institutional Proof Metrics & Platform Highlights (Synced with schoolites.com):
+* **Trial & Offer Badge**: Prominently highlights `🎉 1 Month FREE + Small One-Time Registration Fee (Includes Setup & Training)`, consistent with `schoolites.com/services`.
+* **Headline & Subtitle**: `AI Powered School Management System` — "Simplify your school operations with Schoolites. Manage fees on WhatsApp, biometric attendance, exams, timetables, live transport tracking & more — all in one unified, cloud-native platform." (verbatim from `schoolites.com`).
+* **Scale Proof Grid**: 4 key institutional benchmarks:
+  * `1,000+` Schools Trust Us (`1000+ Schools`)
+  * `500,000+` Students Managed (`5L+ Students / 50K+ Happy Users`)
+  * `99.9%` Cloud Uptime (`99.9% Uptime`)
+  * `100+` Features & Modules (`100+ Features`)
+* **Core Value Cards**: Schoolites Genie [AI Copilot], Online Fees & WhatsApp automation, Biometric Attendance & GPS Bus Tracking, Native iOS/Android Mobile Apps & UDISE+ Compliance.
+* **Trust Badges**: `🛡️ 100% Secure` • `☁️ Cloud Based` • `📱 Mobile Apps (Android & iOS)` • `🎧 24/7 Dedicated Support` • `⚡ Free Training & Setup` (verbatim from `schoolites.com` trust badges and ecosystem section).
+
+### 23.4 Interactive 100+ Modules Explorer Modal (Synced with schoolites.com/services):
+* **Trigger Points**: Triggered via either the `100+ Features & Modules ↗` metric card or the `✨ Explore All 100+ Modules & Features →` action button.
+* **Streamlined Single-Column Card Layout (1 Card per Row)**: All 50 official modules (46 live services + 4 upcoming roadmap innovations) rendered in a flat vertical sequence (one full-width card per row instead of two-column grid) for direct, distraction-free scanning.
+* **Minimalist Chrome**: Top banner, headings, sub-headings, category titles, and search bar removed per user specification. The modal focuses exclusively on the services catalog with dedicated top `✕` and bottom `Close & Return to Form` close buttons.
+* **Rich Module Cards**: Each card displays a verification checkmark (`✓`), official service title, specialized capability badge (e.g. `Core AI`, `Live GPS`, `1-Click Export`, `Roadmap`), and authentic feature description transcribed directly from `schoolites.com/services`.
+* **Accessibility & Navigation**: Supports keyboard `Escape` dismiss, outside-backdrop click close, top-right `✕` round button, and bottom right `Close & Return to Form` action button.
+
+### 23.5 Form & Opt-In Governance:
+* **Simplified Form Heading**: Clean `Enquiry Form` header with concise institutional guidance.
+* **Contact Consent Checkbox**: Includes a default-checked opt-in checkbox (`[x] I agree to be contacted by the Schoolites team regarding this enquiry.`) enforced during client-side submission validation.
+* **Submission Action**: Primary button labeled `Submit Enquiry` with in-flight loading state (`Submitting Enquiry...`).
+
+---
+
+## 24. Automated Transactional Emails & Notifications
+
+### 24.1 User Welcome & Onboarding Email
+* **Trigger**: Triggered automatically in [`src/app/api/admin/users/route.ts`](src/app/api/admin/users/route.ts) when an administrator creates a new user account.
+* **Dispatched Content**:
+  * Personalized greeting and assigned system role title.
+  * Account identification details: `user_code` (e.g. `PM-110`, `PS-10`, `ADM-1`) and registered email address.
+  * Direct link to the login screen (`/login`) with instructions explaining passwordless OTP authentication (no password required; 6-digit code sent on login).
+  * For Promoters: Dedicated public referral link (`/e/{user_code}`) with instructions on sharing with schools to track leads and commissions.
+* **Delivery Engine**: Sent via Brevo HTTP API ([`src/lib/mail.ts`](src/lib/mail.ts)) with dual plain text and styled dark-mode HTML template.
+* **Fault Tolerance**: Wrapped in a non-blocking `try...catch` so email transport hiccups never block user account creation. In development (when `BREVO_API_KEY` is unset), delivery is safely simulated in console logs.
+
+### 24.2 Visitor Enquiry Confirmation Email
+* **Trigger**: Triggered automatically in [`src/app/api/enquiries/route.ts`](src/app/api/enquiries/route.ts) when a prospective school/visitor submits an enquiry form on `/e/[code]` and provides an email address.
+* **Dispatched Content**:
+  * Personalized greeting and acknowledgement of enquiry submission for their institution.
+  * Unique enquiry reference code (`ENQ-XXX`) for ongoing tracking.
+  * Next-steps breakdown: dedicated consultant outreach, customized live demo, and 1-Month Free Trial with data onboarding support.
+  * Overview of enterprise capabilities (GPS bus tracking, fee automation, biometric attendance, UDISE+ export).
+* **Delivery Engine**: Sent via Brevo HTTP API ([`src/lib/mail.ts`](src/lib/mail.ts)) with dual plain text and styled HTML template.
+* **Fault Tolerance**: Non-blocking `try...catch` ensuring the visitor's enquiry is recorded and confirmation screen is rendered even if the mail provider is unavailable.
+
+
+
+
 
 
 

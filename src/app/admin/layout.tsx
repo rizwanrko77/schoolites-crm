@@ -35,14 +35,15 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const navItems: NavItem[] = [
-    { id: 'users', label: 'All Users', href: '/admin/users', icon: '👥', badge: 'Core', isActive: pathname.startsWith('/admin/users') },
-    { id: 'enquiries', label: 'All Enquiries', href: '/admin/enquiries', icon: '📥', badge: 'Inbound', isActive: pathname.startsWith('/admin/enquiries') },
-    { id: 'leads', label: 'All Leads', href: '/admin/leads', icon: '🎯', badge: 'Phase 4', isActive: pathname.startsWith('/admin/leads') },
-    { id: 'forms', label: 'Form Builder', href: '/admin/forms', icon: '📝', badge: 'V1', isActive: pathname.startsWith('/admin/forms') },
-    { id: 'database', label: 'Places DB', href: '/admin/database', icon: '🏢', badge: 'Active', isActive: pathname.startsWith('/admin/database') },
-    { id: 'business', label: 'Business & Payouts', href: '/admin/business', icon: '💼', badge: 'Active', isActive: pathname.startsWith('/admin/business') || pathname.startsWith('/admin/incentives') },
-    { id: 'assets', label: 'Assets Hub', href: '/admin/assets', icon: '📁', badge: 'Phase 3', isActive: pathname.startsWith('/admin/assets') },
-    { id: 'logs', label: 'Audit Logs', href: '/admin/logs', icon: '📜', badge: 'Security', isActive: pathname.startsWith('/admin/logs') },
+    { id: 'users', label: 'All Users', href: '/admin/users', icon: '👥', isActive: pathname.startsWith('/admin/users') },
+    { id: 'enquiries', label: 'All Enquiries', href: '/admin/enquiries', icon: '📥', isActive: pathname.startsWith('/admin/enquiries') },
+    { id: 'leads', label: 'All Leads', href: '/admin/leads', icon: '🎯', isActive: pathname.startsWith('/admin/leads') },
+    { id: 'forms', label: 'Form Builder', href: '/admin/forms', icon: '📝', isActive: pathname.startsWith('/admin/forms') },
+    { id: 'database', label: 'Places DB', href: '/admin/database', icon: '🏢', isActive: pathname.startsWith('/admin/database') },
+    { id: 'business', label: 'Business & Payouts', href: '/admin/business', icon: '💼', isActive: pathname.startsWith('/admin/business') || pathname.startsWith('/admin/incentives') },
+    { id: 'pricing', label: 'Pricing Engine', href: '/admin/pricing', icon: '🏷️', isActive: pathname.startsWith('/admin/pricing') },
+    { id: 'assets', label: 'Assets Hub', href: '/admin/assets', icon: '📁', isActive: pathname.startsWith('/admin/assets') },
+    { id: 'logs', label: 'Audit Logs', href: '/admin/logs', icon: '📜', isActive: pathname.startsWith('/admin/logs') },
   ];
 
   const currentNav = navItems.find((n) => n.isActive);

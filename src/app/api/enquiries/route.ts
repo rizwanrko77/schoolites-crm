@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { sendEnquiryConfirmationEmail } from '@/lib/mail';
 
 // GET: Authenticated user fetches their enquiries (or admin fetches all)
 export async function GET(req: NextRequest) {
@@ -231,6 +232,21 @@ export async function POST(req: NextRequest) {
       `;
     } catch (auditErr) {
       console.warn('Failed to write audit log for enquiry:', auditErr);
+    }
+
+    // 8. Dispatch Confirmation Email if visitor provided an email address (non-blocking)
+    const visitorEmail = form_data.email ? String(form_data.email).trim() : '';
+    if (visitorEmail) {
+      try {
+        await sendEnquiryConfirmationEmail({
+          to: visitorEmail,
+          name: form_data.name ? String(form_data.name).trim() : 'Valued Educator',
+          enquiryCode: enquiryCode,
+          instituteName: form_data.institute_name ? String(form_data.institute_name).trim() : undefined,
+        });
+      } catch (mailErr) {
+        console.warn('Failed to send confirmation email for enquiry:', mailErr);
+      }
     }
 
     return NextResponse.json({

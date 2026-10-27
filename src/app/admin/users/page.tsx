@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAdminReady } from '../admin-session';
 
@@ -21,12 +21,23 @@ interface User {
 interface UserCounts {
   total: number;
   active: number;
+  inactive?: number;
   admin: number;
   pre_sales: number;
   referral: number;
   promoter?: number;
   business_relations: number;
 }
+
+const ROLE_OPTIONS = [
+  { id: 'admin', label: 'Admins', prefix: 'ADM', color: 'var(--role-admin-color)' },
+  { id: 'pre_sales', label: 'Pre-Sales', prefix: 'PS', color: 'var(--role-presales-color)' },
+  { id: 'referral', label: 'Referral Partners', prefix: 'REF', color: 'var(--role-referral-color)' },
+  { id: 'promoter', label: 'Promoters', prefix: 'PM', color: 'var(--role-promoter-color)' },
+  { id: 'business_relations', label: 'Business Relations', prefix: 'BR', color: 'var(--role-business-color)' },
+];
+
+const ALL_ROLE_IDS = ROLE_OPTIONS.map((r) => r.id);
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -42,7 +53,63 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+
+  // Role Multi-Select Filter State
+  const [selectedRoles, setSelectedRoles] = useState<string[]>(ALL_ROLE_IDS);
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const roleDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Active Status Filter State (options: 'all' | 'active' | 'inactive', default: 'active')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Role Breakdown Stats & Overview Card Collapse State (hidden/collapsed by default)
+  const [roleStats, setRoleStats] = useState<Record<string, { total: number; active: number; inactive: number }>>({});
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
+
+  const isAllRolesSelected = selectedRoles.length === ALL_ROLE_IDS.length;
+  const isNoRolesSelected = selectedRoles.length === 0;
+
+  // Dismiss dropdowns on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(event.target as Node)) {
+        setIsRoleDropdownOpen(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setIsStatusDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Dismiss dropdowns on Escape key
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsRoleDropdownOpen(false);
+        setIsStatusDropdownOpen(false);
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const toggleRole = (roleId: string) => {
+    setSelectedRoles((prev) =>
+      prev.includes(roleId) ? prev.filter((r) => r !== roleId) : [...prev, roleId]
+    );
+  };
+
+  const handleSelectAllRoles = () => {
+    setSelectedRoles(ALL_ROLE_IDS);
+  };
+
+  const handleClearRoles = () => {
+    setSelectedRoles([]);
+  };
 
   const ROLE_DEFAULT_RATES: Record<string, number> = {
     promoter: 10,
@@ -79,7 +146,14 @@ export default function AdminUsersPage() {
       setLoading(true);
       setLoadError('');
       const queryParams = new URLSearchParams();
-      if (roleFilter !== 'all') queryParams.append('role', roleFilter);
+      if (selectedRoles.length === 0) {
+        queryParams.append('roles', 'none');
+      } else if (selectedRoles.length < ALL_ROLE_IDS.length) {
+        queryParams.append('roles', selectedRoles.join(','));
+      }
+      if (statusFilter !== 'all') {
+        queryParams.append('status', statusFilter);
+      }
       if (search.trim()) queryParams.append('search', search.trim());
 
       const res = await fetch(`/api/admin/users?${queryParams.toString()}`);
@@ -90,6 +164,7 @@ export default function AdminUsersPage() {
       }
       setUsers(data.users || []);
       if (data.counts) setCounts(data.counts);
+      if (data.roleStats) setRoleStats(data.roleStats);
     } catch {
       setLoadError('Failed to load users');
     } finally {
@@ -103,7 +178,7 @@ export default function AdminUsersPage() {
       fetchUsers();
     }, 250);
     return () => clearTimeout(debounce);
-  }, [search, roleFilter, adminReady]);
+  }, [search, selectedRoles, statusFilter, adminReady]);
 
   const handleConfirmStatusChange = async () => {
     if (!confirmStatusUser) return;
@@ -229,67 +304,169 @@ export default function AdminUsersPage() {
         </button>
       </div>
 
-      {/* Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px' }}>
-        <div className="glass-panel" style={{ padding: '20px' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
-            Total Users
+      {/* Role & Prefix Overview (Compact Summary Table) */}
+      <div className="glass-panel" style={{ overflow: 'hidden' }}>
+        {/* Header with Collapse/Expand Toggle */}
+        <div
+          style={{
+            padding: '14px 20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            cursor: 'pointer',
+            userSelect: 'none',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderBottom: isOverviewExpanded ? '1px solid var(--border-subtle)' : 'none',
+          }}
+          onClick={() => setIsOverviewExpanded((prev) => !prev)}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '1.05rem' }}>📊</span>
+            <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#ffffff' }}>
+              Team Roles & Prefix Overview
+            </span>
+            <span
+              style={{
+                fontSize: '0.78rem',
+                padding: '2px 9px',
+                borderRadius: '12px',
+                background: 'rgba(99, 102, 241, 0.15)',
+                color: '#a5b4fc',
+                fontWeight: 600,
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+              }}
+            >
+              {counts.total} Total ({counts.active} Active, {counts.inactive ?? 0} Inactive)
+            </span>
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-            {counts.total}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--success)', marginTop: '4px' }}>
-            ● {counts.active} Active Access
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+              {isOverviewExpanded ? 'Hide Table' : 'Show Table'}
+            </span>
+            <span
+              style={{
+                fontSize: '0.7rem',
+                color: 'var(--text-muted)',
+                transform: isOverviewExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.15s ease',
+              }}
+            >
+              ▼
+            </span>
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '20px', borderLeft: '3px solid var(--role-presales-color)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--role-presales-color)', textTransform: 'uppercase', marginBottom: '8px' }}>
-            Pre-Sales Team
+        {/* Expandable Table */}
+        {isOverviewExpanded && (
+          <div className="table-responsive">
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.86rem' }}>
+              <thead>
+                <tr style={{ background: 'rgba(255, 255, 255, 0.015)', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <th style={{ padding: '10px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+                    Role Type
+                  </th>
+                  <th style={{ padding: '10px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+                    Code Prefix
+                  </th>
+                  <th style={{ padding: '10px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+                    Active
+                  </th>
+                  <th style={{ padding: '10px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+                    Inactive
+                  </th>
+                  <th style={{ padding: '10px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+                    Total Users
+                  </th>
+                  <th style={{ padding: '10px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ROLE_OPTIONS.map((item) => {
+                  const stat = roleStats[item.id] || { total: 0, active: 0, inactive: 0 };
+                  const isCurrentFilter = selectedRoles.length === 1 && selectedRoles[0] === item.id;
+                  return (
+                    <tr
+                      key={item.id}
+                      style={{
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+                        transition: 'background 0.12s ease',
+                        background: isCurrentFilter ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)')}
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = isCurrentFilter
+                          ? 'rgba(99, 102, 241, 0.08)'
+                          : 'transparent')
+                      }
+                    >
+                      <td style={{ padding: '9px 20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                          <span
+                            style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              background: item.color,
+                              display: 'inline-block',
+                              boxShadow: `0 0 6px ${item.color}`,
+                            }}
+                          />
+                          <span style={{ fontWeight: 600, color: '#ffffff' }}>{item.label}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '9px 20px' }}>
+                        <span className="user-code-pill" style={{ color: item.color, fontSize: '0.78rem' }}>
+                          {item.prefix}-
+                        </span>
+                      </td>
+                      <td style={{ padding: '9px 20px' }}>
+                        <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                          ● {stat.active}
+                        </span>
+                      </td>
+                      <td style={{ padding: '9px 20px' }}>
+                        <span style={{ color: stat.inactive > 0 ? '#f87171' : 'var(--text-muted)', fontWeight: stat.inactive > 0 ? 600 : 400 }}>
+                          {stat.inactive}
+                        </span>
+                      </td>
+                      <td style={{ padding: '9px 20px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {stat.total}
+                      </td>
+                      <td style={{ padding: '9px 20px', textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isCurrentFilter) {
+                              setSelectedRoles(ALL_ROLE_IDS);
+                            } else {
+                              setSelectedRoles([item.id]);
+                            }
+                          }}
+                          style={{
+                            background: isCurrentFilter ? '#6366f1' : 'rgba(255, 255, 255, 0.06)',
+                            border: isCurrentFilter ? '1px solid #818cf8' : '1px solid var(--border-subtle)',
+                            color: isCurrentFilter ? '#ffffff' : 'var(--text-secondary)',
+                            padding: '3px 10px',
+                            borderRadius: '4px',
+                            fontSize: '0.74rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.12s ease',
+                          }}
+                        >
+                          {isCurrentFilter ? 'Clear Filter' : 'Filter →'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff' }}>
-            {counts.pre_sales}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Prefix: <span className="user-code-pill" style={{ color: 'var(--role-presales-color)' }}>PS-</span>
-          </div>
-        </div>
-
-        <div className="glass-panel" style={{ padding: '20px', borderLeft: '3px solid var(--role-referral-color)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--role-referral-color)', textTransform: 'uppercase', marginBottom: '8px' }}>
-            Referral Partners
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff' }}>
-            {counts.referral}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Prefix: <span className="user-code-pill" style={{ color: 'var(--role-referral-color)' }}>REF-</span>
-          </div>
-        </div>
-
-        <div className="glass-panel" style={{ padding: '20px', borderLeft: '3px solid var(--role-promoter-color)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--role-promoter-color)', textTransform: 'uppercase', marginBottom: '8px' }}>
-            Promoters
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff' }}>
-            {counts.promoter || 0}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Prefix: <span className="user-code-pill" style={{ color: 'var(--role-promoter-color)' }}>PM-</span>
-          </div>
-        </div>
-
-        <div className="glass-panel" style={{ padding: '20px', borderLeft: '3px solid var(--role-business-color)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--role-business-color)', textTransform: 'uppercase', marginBottom: '8px' }}>
-            Business Relations
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff' }}>
-            {counts.business_relations}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Prefix: <span className="user-code-pill" style={{ color: 'var(--role-business-color)' }}>BR-</span>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Filter and Search Bar */}
@@ -304,36 +481,316 @@ export default function AdminUsersPage() {
           gap: '16px',
         }}
       >
-        {/* Role Filter Pills */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {[
-            { id: 'all', label: 'All Roles' },
-            { id: 'pre_sales', label: 'Pre-Sales' },
-            { id: 'referral', label: 'Referral' },
-            { id: 'promoter', label: 'Promoters' },
-            { id: 'business_relations', label: 'Business Relations' },
-            { id: 'admin', label: 'Admins' },
-          ].map((tab) => {
-            const isSelected = roleFilter === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setRoleFilter(tab.id)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {/* Role Multi-Select Dropdown Popover */}
+          <div style={{ position: 'relative' }} ref={roleDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsRoleDropdownOpen((prev) => !prev)}
+              aria-expanded={isRoleDropdownOpen}
+              aria-haspopup="true"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '9px',
+                padding: '8px 15px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                background: !isAllRolesSelected ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                color: !isAllRolesSelected ? '#a5b4fc' : 'var(--text-secondary)',
+                border: !isAllRolesSelected ? '1px solid #818cf8' : '1px solid var(--border-subtle)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: !isAllRolesSelected ? '0 0 10px rgba(99, 102, 241, 0.25)' : 'none',
+              }}
+            >
+              <span>👥</span>
+              <span>
+                {isAllRolesSelected
+                  ? 'All Roles'
+                  : isNoRolesSelected
+                  ? 'No Roles'
+                  : selectedRoles.length === 1
+                  ? ROLE_OPTIONS.find((r) => r.id === selectedRoles[0])?.label || '1 Role'
+                  : `Roles (${selectedRoles.length})`}
+              </span>
+              <span
                 style={{
-                  padding: '7px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  background: isSelected ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                  color: isSelected ? '#ffffff' : 'var(--text-secondary)',
-                  border: isSelected ? '1px solid #818cf8' : '1px solid transparent',
-                  transition: 'all 0.15s ease',
+                  fontSize: '0.65rem',
+                  opacity: 0.8,
+                  transition: 'transform 0.15s ease',
+                  transform: isRoleDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                 }}
               >
-                {tab.label}
-              </button>
-            );
-          })}
+                ▼
+              </span>
+            </button>
+
+            {isRoleDropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  zIndex: 100,
+                  width: '270px',
+                  background: '#0f172a',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '8px',
+                  boxShadow: '0 12px 30px rgba(0, 0, 0, 0.65)',
+                  padding: '12px',
+                  animation: 'fadeIn 0.15s ease',
+                }}
+              >
+                {/* Popover Header */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '10px',
+                    paddingBottom: '8px',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      color: 'var(--text-muted)',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    Filter Roles
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllRoles}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#818cf8',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      All
+                    </button>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>|</span>
+                    <button
+                      type="button"
+                      onClick={handleClearRoles}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* Roles Checkbox List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {ROLE_OPTIONS.map((role) => {
+                    const isChecked = selectedRoles.includes(role.id);
+                    const roleCount = (counts as any)[role.id] ?? 0;
+                    return (
+                      <label
+                        key={role.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '0.82rem',
+                          transition: 'background 0.12s ease',
+                          background: isChecked ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = isChecked
+                            ? 'rgba(255, 255, 255, 0.04)'
+                            : 'transparent';
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleRole(role.id)}
+                            style={{
+                              cursor: 'pointer',
+                              accentColor: '#6366f1',
+                              width: '14px',
+                              height: '14px',
+                            }}
+                          />
+                          <span style={{ color: isChecked ? '#ffffff' : 'var(--text-secondary)' }}>
+                            {role.label}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.74rem',
+                              color: 'var(--text-muted)',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {roleCount}
+                          </span>
+                          <span
+                            style={{
+                              width: '7px',
+                              height: '7px',
+                              borderRadius: '50%',
+                              background: role.color,
+                              display: 'inline-block',
+                            }}
+                          />
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Active Status Dropdown Popover */}
+          <div style={{ position: 'relative' }} ref={statusDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsStatusDropdownOpen((prev) => !prev)}
+              aria-expanded={isStatusDropdownOpen}
+              aria-haspopup="true"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 15px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                background: statusFilter !== 'all' ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                color: statusFilter !== 'all' ? '#ffffff' : 'var(--text-secondary)',
+                border: statusFilter !== 'all' ? '1px solid #818cf8' : '1px solid var(--border-subtle)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: statusFilter !== 'all' ? '0 0 10px rgba(99, 102, 241, 0.2)' : 'none',
+              }}
+            >
+              <span>
+                {statusFilter === 'active' ? '🟢' : statusFilter === 'inactive' ? '🔴' : '🔘'}
+              </span>
+              <span>
+                {statusFilter === 'active'
+                  ? 'Active'
+                  : statusFilter === 'inactive'
+                  ? 'Inactive'
+                  : 'All Statuses'}
+              </span>
+              <span
+                style={{
+                  fontSize: '0.65rem',
+                  opacity: 0.8,
+                  transition: 'transform 0.15s ease',
+                  transform: isStatusDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                }}
+              >
+                ▼
+              </span>
+            </button>
+
+            {isStatusDropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  zIndex: 100,
+                  width: '190px',
+                  background: '#0f172a',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '8px',
+                  boxShadow: '0 12px 30px rgba(0, 0, 0, 0.65)',
+                  padding: '8px',
+                  animation: 'fadeIn 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {[
+                    { id: 'all', label: 'All Statuses', icon: '🔘', count: counts.total },
+                    { id: 'active', label: 'Active', icon: '🟢', count: counts.active },
+                    { id: 'inactive', label: 'Inactive', icon: '🔴', count: counts.inactive ?? (counts.total - counts.active) },
+                  ].map((opt) => {
+                    const isSelected = statusFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setStatusFilter(opt.id as any);
+                          setIsStatusDropdownOpen(false);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '7px 10px',
+                          borderRadius: '5px',
+                          background: isSelected ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                          color: isSelected ? '#ffffff' : 'var(--text-secondary)',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '0.82rem',
+                          fontWeight: isSelected ? 600 : 500,
+                          textAlign: 'left',
+                          transition: 'background 0.12s ease',
+                          width: '100%',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '0.75rem' }}>{opt.icon}</span>
+                          <span>{opt.label}</span>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '0.74rem',
+                            color: 'var(--text-muted)',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {opt.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Search input */}

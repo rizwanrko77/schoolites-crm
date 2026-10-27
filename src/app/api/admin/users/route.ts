@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
+import { sendUserWelcomeEmail } from '@/lib/mail';
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,7 +11,9 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
+    const rolesParam = searchParams.get('roles');
     const roleFilter = searchParams.get('role');
+    const statusFilter = searchParams.get('status'); // 'all' | 'active' | 'inactive'
     const search = searchParams.get('search')?.toLowerCase() || '';
 
     // Fetch users list
@@ -24,6 +27,7 @@ export async function GET(req: NextRequest) {
     const counts = {
       total: users.length,
       active: users.filter((u: any) => u.is_active).length,
+      inactive: users.filter((u: any) => !u.is_active).length,
       admin: users.filter((u: any) => u.role === 'admin').length,
       pre_sales: users.filter((u: any) => u.role === 'pre_sales').length,
       referral: users.filter((u: any) => u.role === 'referral').length,
@@ -31,9 +35,36 @@ export async function GET(req: NextRequest) {
       business_relations: users.filter((u: any) => u.role === 'business_relations').length,
     };
 
-    // Apply filters if requested
-    if (roleFilter && roleFilter !== 'all') {
+    // Calculate role-level active vs inactive breakdown
+    const roleStats: Record<string, { total: number; active: number; inactive: number }> = {};
+    for (const r of ['admin', 'pre_sales', 'referral', 'promoter', 'business_relations']) {
+      const rUsers = users.filter((u: any) => u.role === r);
+      roleStats[r] = {
+        total: rUsers.length,
+        active: rUsers.filter((u: any) => u.is_active).length,
+        inactive: rUsers.filter((u: any) => !u.is_active).length,
+      };
+    }
+
+    // Apply role filtering (supports comma-separated roles or legacy single role)
+    if (rolesParam) {
+      if (rolesParam === 'none') {
+        users = [];
+      } else {
+        const allowed = rolesParam.split(',').map((r) => r.trim()).filter(Boolean);
+        if (allowed.length > 0 && !allowed.includes('all')) {
+          users = users.filter((u: any) => allowed.includes(u.role));
+        }
+      }
+    } else if (roleFilter && roleFilter !== 'all') {
       users = users.filter((u: any) => u.role === roleFilter);
+    }
+
+    // Apply active status filtering
+    if (statusFilter === 'active') {
+      users = users.filter((u: any) => u.is_active);
+    } else if (statusFilter === 'inactive') {
+      users = users.filter((u: any) => !u.is_active);
     }
 
     if (search) {
@@ -45,7 +76,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ users, counts });
+    return NextResponse.json({ users, counts, roleStats });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to fetch users' }, { status: 500 });
   }
@@ -132,6 +163,18 @@ export async function POST(req: NextRequest) {
       `;
     } catch (auditErr) {
       console.warn('Failed to write audit log for user creation:', auditErr);
+    }
+
+    // Dispatch Welcome Email with login instructions & referral link (non-blocking)
+    try {
+      await sendUserWelcomeEmail({
+        to: newUser.email,
+        name: newUser.name,
+        role: newUser.role,
+        userCode: newUser.user_code,
+      });
+    } catch (mailErr) {
+      console.warn('Failed to send welcome email for new user:', mailErr);
     }
 
     return NextResponse.json({ success: true, user: newUser });
