@@ -233,12 +233,11 @@ export async function clearSession() {
  * Retrieve current authenticated user from session cookie
  */
 export async function getSessionUser(): Promise<UserSession | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!token) return null;
-
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+    if (!token) return null;
     const res = await sql`
       SELECT u.id, u.user_code, u.name, u.email, u.role, u.commission_rate, u.date_of_joining, u.description, u.is_active, u.has_database_access
       FROM sessions s

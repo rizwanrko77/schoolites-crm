@@ -13,25 +13,39 @@ import { useEffect, useRef } from 'react';
  * - 100% preserves Neon Postgres "Scale-to-Zero" ($0 idle database cost when away).
  * - Zero battery or CPU drain when minimized or in background.
  */
-export function usePipelineAutoSync(onRefresh: () => void, intervalMs = 30000) {
+export function usePipelineAutoSync(onRefresh: () => void, intervalMs = 30000, cooldownMs = 10000) {
   const refreshRef = useRef(onRefresh);
+  const lastSyncTimeRef = useRef<number>(0);
 
   useEffect(() => {
     refreshRef.current = onRefresh;
   }, [onRefresh]);
 
   useEffect(() => {
+    lastSyncTimeRef.current = Date.now();
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // 1. Refresh on tab focus
-    const handleFocus = () => {
+    const triggerSync = () => {
+      const now = Date.now();
+      if (now - lastSyncTimeRef.current < cooldownMs) {
+        return; // Throttled: avoid spamming server within cooldown window
+      }
+      lastSyncTimeRef.current = now;
       refreshRef.current?.();
     };
 
-    // 2. Refresh when tab becomes visible
+    // 1. Refresh on tab focus (throttled)
+    const handleFocus = () => {
+      triggerSync();
+    };
+
+    // 2. Refresh when tab becomes visible (throttled)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        refreshRef.current?.();
+        triggerSync();
       }
     };
 
@@ -41,7 +55,7 @@ export function usePipelineAutoSync(onRefresh: () => void, intervalMs = 30000) {
     // 3. Low-frequency polling only when visible
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') {
-        refreshRef.current?.();
+        triggerSync();
       }
     }, intervalMs);
 
@@ -50,5 +64,5 @@ export function usePipelineAutoSync(onRefresh: () => void, intervalMs = 30000) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(timer);
     };
-  }, [intervalMs]);
+  }, [intervalMs, cooldownMs]);
 }

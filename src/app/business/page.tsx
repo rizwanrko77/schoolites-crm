@@ -78,8 +78,20 @@ type TabType = 'unassigned' | 'my' | 'all' | 'created_by_me' | 'enquiries' | 'as
 export default function BusinessRelationsPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTabState] = useState<TabType>('unassigned');
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Hydrate URL tab and saved filters safely on mount directly into state
+  const [activeTab, setActiveTabState] = useState<TabType>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const paramTab = new URLSearchParams(window.location.search).get('tab') as TabType;
+        const validTabs: TabType[] = ['unassigned', 'my', 'all', 'created_by_me', 'enquiries', 'assets', 'business'];
+        if (paramTab && validTabs.includes(paramTab)) return paramTab;
+      } catch {}
+    }
+    return 'unassigned';
+  });
 
   const setActiveTab = (tab: TabType) => {
     setActiveTabState(tab);
@@ -90,37 +102,36 @@ export default function BusinessRelationsPage() {
     }
   };
   
-  // Search, Status Filter & Sorting State with sessionStorage persistence
-  const [search, setSearch] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(ALL_STATUS_IDS);
-  const [sortBy, setSortBy] = useState<string>('created_desc');
+  // Search, Status Filter & Sorting State with synchronous sessionStorage initialization
+  const [search, setSearch] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try { return sessionStorage.getItem('br_leads_search') || ''; } catch {}
+    }
+    return '';
+  });
+
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('br_leads_statuses');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return ALL_STATUS_IDS;
+  });
+
+  const [sortBy, setSortBy] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try { return sessionStorage.getItem('br_leads_sort') || 'created_desc'; } catch {}
+    }
+    return 'created_desc';
+  });
+
   const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
   const [toastMsg, setToastMsg] = useState('');
-
-  // Hydrate URL tab and saved filters safely on mount after initial render
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const paramTab = new URLSearchParams(window.location.search).get('tab') as TabType;
-    const validTabs: TabType[] = ['unassigned', 'my', 'all', 'created_by_me', 'enquiries', 'assets', 'business'];
-    if (paramTab && validTabs.includes(paramTab)) {
-      setActiveTabState(paramTab);
-    }
-
-    try {
-      const savedSearch = sessionStorage.getItem('br_leads_search');
-      if (savedSearch) setSearch(savedSearch);
-
-      const savedStatuses = sessionStorage.getItem('br_leads_statuses');
-      if (savedStatuses) {
-        const parsed = JSON.parse(savedStatuses);
-        if (Array.isArray(parsed) && parsed.length > 0) setSelectedStatuses(parsed);
-      }
-
-      const savedSort = sessionStorage.getItem('br_leads_sort');
-      if (savedSort) setSortBy(savedSort);
-    } catch {}
-  }, []);
 
   // Leads Data
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -164,11 +175,16 @@ export default function BusinessRelationsPage() {
   const fetchLeads = async () => {
     try {
       const isLeadTab = ['unassigned', 'my', 'all', 'created_by_me'].includes(activeTab);
-      if (isLeadTab) setLoading(true);
+      if (leads.length === 0) {
+        if (isLeadTab) setIsInitialLoading(true);
+      } else {
+        if (isLeadTab) setIsSyncing(true);
+      }
 
       if (selectedStatuses.length === 0) {
         setLeads([]);
-        setLoading(false);
+        setIsInitialLoading(false);
+        setIsSyncing(false);
         return;
       }
 
@@ -189,7 +205,8 @@ export default function BusinessRelationsPage() {
     } catch (err) {
       console.error('Failed to fetch leads', err);
     } finally {
-      setLoading(false);
+      setIsInitialLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -606,7 +623,8 @@ export default function BusinessRelationsPage() {
             />
 
             {/* Leads Table */}
-            <div className="glass-panel" style={{ overflow: 'hidden' }}>
+            <div className="glass-panel" style={{ overflow: 'hidden', position: 'relative' }}>
+              {isSyncing && <div className="sync-progress-bar" />}
               <div className="table-responsive">
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                   <thead>
@@ -692,7 +710,7 @@ export default function BusinessRelationsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {loading ? (
+                    {isInitialLoading && leads.length === 0 ? (
                       <tr>
                         <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                           Loading pipeline...

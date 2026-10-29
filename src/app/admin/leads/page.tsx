@@ -39,10 +39,22 @@ interface Lead {
 
 export default function AdminLeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   type AdminTabType = 'all' | 'duplicates' | 'unassigned' | 'won' | 'lost';
-  const [tabFilter, setTabFilterState] = useState<AdminTabType>('all');
+  
+  // Initialize state directly from URL and sessionStorage to avoid double fetch and hydration flickers
+  const [tabFilter, setTabFilterState] = useState<AdminTabType>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const paramTab = new URLSearchParams(window.location.search).get('tab') as AdminTabType;
+        const validTabs: AdminTabType[] = ['all', 'duplicates', 'unassigned', 'won', 'lost'];
+        if (paramTab && validTabs.includes(paramTab)) return paramTab;
+      } catch {}
+    }
+    return 'all';
+  });
 
   const setTabFilter = (tab: AdminTabType) => {
     setTabFilterState(tab);
@@ -53,36 +65,35 @@ export default function AdminLeadsPage() {
     }
   };
   
-  // Search, Status Filter & Sorting State with sessionStorage persistence
-  const [search, setSearch] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(ALL_STATUS_IDS);
-  const [sortBy, setSortBy] = useState<string>('created_desc');
-  const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
-
-  // Hydrate URL tab and saved filters safely on mount after initial render
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const paramTab = new URLSearchParams(window.location.search).get('tab') as AdminTabType;
-    const validTabs: AdminTabType[] = ['all', 'duplicates', 'unassigned', 'won', 'lost'];
-    if (paramTab && validTabs.includes(paramTab)) {
-      setTabFilterState(paramTab);
+  // Search, Status Filter & Sorting State with synchronous sessionStorage initialization
+  const [search, setSearch] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try { return sessionStorage.getItem('admin_leads_search') || ''; } catch {}
     }
+    return '';
+  });
 
-    try {
-      const savedSearch = sessionStorage.getItem('admin_leads_search');
-      if (savedSearch) setSearch(savedSearch);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('admin_leads_statuses');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return ALL_STATUS_IDS;
+  });
 
-      const savedStatuses = sessionStorage.getItem('admin_leads_statuses');
-      if (savedStatuses) {
-        const parsed = JSON.parse(savedStatuses);
-        if (Array.isArray(parsed) && parsed.length > 0) setSelectedStatuses(parsed);
-      }
+  const [sortBy, setSortBy] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try { return sessionStorage.getItem('admin_leads_sort') || 'created_desc'; } catch {}
+    }
+    return 'created_desc';
+  });
 
-      const savedSort = sessionStorage.getItem('admin_leads_sort');
-      if (savedSort) setSortBy(savedSort);
-    } catch {}
-  }, []);
+  const [columnSort, setColumnSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -102,10 +113,16 @@ export default function AdminLeadsPage() {
 
   const fetchLeads = async () => {
     try {
-      setLoading(true);
+      if (leads.length === 0) {
+        setIsInitialLoading(true);
+      } else {
+        setIsSyncing(true);
+      }
+
       if (selectedStatuses.length === 0) {
         setLeads([]);
-        setLoading(false);
+        setIsInitialLoading(false);
+        setIsSyncing(false);
         return;
       }
       const params = new URLSearchParams();
@@ -123,7 +140,8 @@ export default function AdminLeadsPage() {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      setIsInitialLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -356,7 +374,8 @@ export default function AdminLeadsPage() {
       />
 
       {/* Leads Table */}
-      <div className="glass-panel" style={{ overflow: 'hidden' }}>
+      <div className="glass-panel" style={{ overflow: 'hidden', position: 'relative' }}>
+        {isSyncing && <div className="sync-progress-bar" />}
         <div className="table-responsive">
           <table className="enterprise-table">
             <thead className="enterprise-thead">
@@ -416,7 +435,7 @@ export default function AdminLeadsPage() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {isInitialLoading && leads.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                     Loading all pipeline leads...

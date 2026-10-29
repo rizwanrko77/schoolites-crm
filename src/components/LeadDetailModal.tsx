@@ -127,6 +127,7 @@ export default function LeadDetailModal({
   const showContractTab = isContractEligibleRole && (lead?.status === 'won' || Boolean(contract));
 
   useEffect(() => {
+    if (!leadId) return;
     if (availableManagers && availableManagers.length > 0) {
       setManagersList(availableManagers);
     } else if (currentUser?.role === 'admin' || currentUser?.role === 'business_relations') {
@@ -135,7 +136,7 @@ export default function LeadDetailModal({
         .then((data) => setManagersList(data.managers || []))
         .catch((err) => console.error(err));
     }
-  }, [availableManagers, currentUser, showReassignModal, pendingStatusChange]);
+  }, [leadId, availableManagers, currentUser, showReassignModal, pendingStatusChange]);
 
   const fetchLeadDetails = async () => {
     if (!leadId) return;

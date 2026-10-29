@@ -512,3 +512,21 @@ button {
   flex-shrink: 0;
 }
 
+/* Table Sync Top Progress Bar */
+@keyframes syncProgress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(30%); }
+  100% { transform: translateX(200%); }
+}
+
+.sync-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 2.5px;
+  background: linear-gradient(90deg, transparent, #818cf8, #38bdf8, transparent);
+  animation: syncProgress 1.4s ease-in-out infinite;
+  z-index: 10;
+}
+

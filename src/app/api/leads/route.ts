@@ -15,46 +15,55 @@ export async function GET(req: NextRequest) {
     const sortBy = searchParams.get('sort_by') || 'created_desc';
     const search = searchParams.get('search')?.toLowerCase().trim() || '';
 
-    let leads = await sql`
-      SELECT l.id, l.lead_code, l.owner_id, l.promoter_id, l.manager_id, l.source_enquiry_id,
-             l.institute_type, l.institute_name, l.country, l.city, l.student_strength,
-             l.current_erp, l.current_erp_name,
-             l.spoc_name, l.spoc_role, l.spoc_phone, l.spoc_email,
-             l.dm_same_as_spoc, l.dm_name, l.dm_role, l.dm_phone, l.dm_email,
-             l.additional_contact_name, l.additional_contact_role, l.additional_contact_phone, l.additional_contact_email,
-             l.decision_flow, l.preferred_slot_date, l.preferred_slot_time, l.preferred_slot_mode, l.expected_start_date, l.additional_details,
-             l.status, l.deal_value, l.is_duplicate, l.duplicate_of_lead_id, l.duplicate_flag_cleared,
-             l.created_at, l.updated_at,
-             u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
-             u_mgr.name as manager_name, u_mgr.user_code as manager_code,
-             u_prom.name as promoter_name, u_prom.user_code as promoter_code,
-             lc.contract_amount, lc.status as contract_status
-      FROM leads l
-      JOIN users u_owner ON l.owner_id = u_owner.id
-      LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
-      LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
-      LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
-      ORDER BY l.created_at DESC
-    `;
+    let leads;
 
-    // Apply view filters
-    if (view === 'unassigned') {
-      leads = leads.filter((l: any) => l.manager_id === null || l.status === 'unassigned');
-    } else if (view === 'my') {
-      leads = leads.filter((l: any) => l.manager_id === user.id);
-    } else if (view === 'created_by_me') {
-      leads = leads.filter((l: any) => l.owner_id === user.id);
-    }
-
-    // Role-based restrictions for non-admin/non-BR users:
-    // Pre-Sales and Referral partners can only view leads created by themselves
-    if (user.role === 'pre_sales' || user.role === 'referral') {
-      leads = leads.filter((l: any) => l.owner_id === user.id);
+    if (user.role === 'pre_sales' || user.role === 'referral' || view === 'created_by_me') {
+      // Scoped to leads created by the current user
+      leads = await sql`
+        SELECT l.id, l.lead_code, l.owner_id, l.promoter_id, l.manager_id, l.source_enquiry_id,
+               l.institute_type, l.institute_name, l.country, l.city, l.student_strength,
+               l.current_erp, l.current_erp_name,
+               l.spoc_name, l.spoc_role, l.spoc_phone, l.spoc_email,
+               l.dm_same_as_spoc, l.dm_name, l.dm_role, l.dm_phone, l.dm_email,
+               l.additional_contact_name, l.additional_contact_role, l.additional_contact_phone, l.additional_contact_email,
+               l.decision_flow, l.preferred_slot_date, l.preferred_slot_time, l.preferred_slot_mode, l.expected_start_date, l.additional_details,
+               l.status, l.deal_value, l.is_duplicate, l.duplicate_of_lead_id, l.duplicate_flag_cleared,
+               l.created_at, l.updated_at,
+               u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+               u_mgr.name as manager_name, u_mgr.user_code as manager_code,
+               u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+               lc.contract_amount, lc.status as contract_status
+        FROM leads l
+        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+        LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
+        LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
+        WHERE l.owner_id = ${user.id}
+        ORDER BY l.created_at DESC
+      `;
     } else if (user.role === 'promoter') {
-      // Promoters view only leads originated from their promotional enquiries
-      leads = leads.filter((l: any) => l.promoter_id === user.id);
-      // Mask contact information for promoter privacy protection
-      leads = leads.map((l: any) => ({
+      // Promoter sees only leads originated from their promotions with masked contact data
+      const rawLeads = await sql`
+        SELECT l.id, l.lead_code, l.owner_id, l.promoter_id, l.manager_id, l.source_enquiry_id,
+               l.institute_type, l.institute_name, l.country, l.city, l.student_strength,
+               l.current_erp, l.current_erp_name,
+               l.spoc_name, l.spoc_role, l.spoc_phone, l.spoc_email,
+               l.decision_flow, l.preferred_slot_date, l.preferred_slot_time, l.preferred_slot_mode, l.expected_start_date, l.additional_details,
+               l.status, l.deal_value, l.is_duplicate, l.duplicate_of_lead_id, l.duplicate_flag_cleared,
+               l.created_at, l.updated_at,
+               u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+               u_mgr.name as manager_name, u_mgr.user_code as manager_code,
+               u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+               lc.contract_amount, lc.status as contract_status
+        FROM leads l
+        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+        LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
+        LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
+        WHERE l.promoter_id = ${user.id}
+        ORDER BY l.created_at DESC
+      `;
+      leads = rawLeads.map((l: any) => ({
         ...l,
         spoc_phone: l.spoc_phone ? `${l.spoc_phone.slice(0, 3)}*****${l.spoc_phone.slice(-2)}` : '—',
         spoc_email: l.spoc_email ? l.spoc_email.replace(/(?<=^.).(?=.*@)/g, '*') : null,
@@ -63,6 +72,77 @@ export async function GET(req: NextRequest) {
         additional_contact_phone: null,
         additional_contact_email: null,
       }));
+    } else if (view === 'my') {
+      // Leads assigned to current manager
+      leads = await sql`
+        SELECT l.id, l.lead_code, l.owner_id, l.promoter_id, l.manager_id, l.source_enquiry_id,
+               l.institute_type, l.institute_name, l.country, l.city, l.student_strength,
+               l.current_erp, l.current_erp_name,
+               l.spoc_name, l.spoc_role, l.spoc_phone, l.spoc_email,
+               l.dm_same_as_spoc, l.dm_name, l.dm_role, l.dm_phone, l.dm_email,
+               l.additional_contact_name, l.additional_contact_role, l.additional_contact_phone, l.additional_contact_email,
+               l.decision_flow, l.preferred_slot_date, l.preferred_slot_time, l.preferred_slot_mode, l.expected_start_date, l.additional_details,
+               l.status, l.deal_value, l.is_duplicate, l.duplicate_of_lead_id, l.duplicate_flag_cleared,
+               l.created_at, l.updated_at,
+               u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+               u_mgr.name as manager_name, u_mgr.user_code as manager_code,
+               u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+               lc.contract_amount, lc.status as contract_status
+        FROM leads l
+        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+        LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
+        LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
+        WHERE l.manager_id = ${user.id}
+        ORDER BY l.created_at DESC
+      `;
+    } else if (view === 'unassigned') {
+      // Unassigned leads pool
+      leads = await sql`
+        SELECT l.id, l.lead_code, l.owner_id, l.promoter_id, l.manager_id, l.source_enquiry_id,
+               l.institute_type, l.institute_name, l.country, l.city, l.student_strength,
+               l.current_erp, l.current_erp_name,
+               l.spoc_name, l.spoc_role, l.spoc_phone, l.spoc_email,
+               l.dm_same_as_spoc, l.dm_name, l.dm_role, l.dm_phone, l.dm_email,
+               l.additional_contact_name, l.additional_contact_role, l.additional_contact_phone, l.additional_contact_email,
+               l.decision_flow, l.preferred_slot_date, l.preferred_slot_time, l.preferred_slot_mode, l.expected_start_date, l.additional_details,
+               l.status, l.deal_value, l.is_duplicate, l.duplicate_of_lead_id, l.duplicate_flag_cleared,
+               l.created_at, l.updated_at,
+               u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+               u_mgr.name as manager_name, u_mgr.user_code as manager_code,
+               u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+               lc.contract_amount, lc.status as contract_status
+        FROM leads l
+        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+        LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
+        LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
+        WHERE (l.manager_id IS NULL OR l.status = 'unassigned')
+        ORDER BY l.created_at DESC
+      `;
+    } else {
+      // All leads view (Admin / BR overall view)
+      leads = await sql`
+        SELECT l.id, l.lead_code, l.owner_id, l.promoter_id, l.manager_id, l.source_enquiry_id,
+               l.institute_type, l.institute_name, l.country, l.city, l.student_strength,
+               l.current_erp, l.current_erp_name,
+               l.spoc_name, l.spoc_role, l.spoc_phone, l.spoc_email,
+               l.dm_same_as_spoc, l.dm_name, l.dm_role, l.dm_phone, l.dm_email,
+               l.additional_contact_name, l.additional_contact_role, l.additional_contact_phone, l.additional_contact_email,
+               l.decision_flow, l.preferred_slot_date, l.preferred_slot_time, l.preferred_slot_mode, l.expected_start_date, l.additional_details,
+               l.status, l.deal_value, l.is_duplicate, l.duplicate_of_lead_id, l.duplicate_flag_cleared,
+               l.created_at, l.updated_at,
+               u_owner.name as owner_name, u_owner.user_code as owner_code, u_owner.role as owner_role,
+               u_mgr.name as manager_name, u_mgr.user_code as manager_code,
+               u_prom.name as promoter_name, u_prom.user_code as promoter_code,
+               lc.contract_amount, lc.status as contract_status
+        FROM leads l
+        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
+        LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
+        LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
+        ORDER BY l.created_at DESC
+      `;
     }
 
     // Multi-status filtering

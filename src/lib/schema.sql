@@ -146,10 +146,12 @@ CREATE TABLE IF NOT EXISTS leads (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_leads_owner ON leads(owner_id);
+CREATE INDEX IF NOT EXISTS idx_leads_promoter ON leads(promoter_id);
 CREATE INDEX IF NOT EXISTS idx_leads_manager ON leads(manager_id);
 CREATE INDEX IF NOT EXISTS idx_leads_spoc_phone ON leads(spoc_phone);
 CREATE INDEX IF NOT EXISTS idx_leads_spoc_email ON leads(spoc_email);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at DESC);
 
 -- 8. Notes & Remarks (Personal vs Global)
 CREATE TABLE IF NOT EXISTS record_notes (
