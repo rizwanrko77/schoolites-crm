@@ -4,7 +4,7 @@ This is the production setup for the Next.js app in this folder. The school PHP 
 
 ## Push changes to Vercel
 
-Production is the Vercel project `leads`. The public site is [https://leads.schoolites.com](https://leads.schoolites.com). This folder is already linked (`.vercel/project.json`). Vercel does not deploy when Bitbucket `main` moves. Ship with the Vercel CLI from this directory.
+Production is the Vercel project `leads`. The public site is [https://join.schoolites.com](https://join.schoolites.com). This folder is already linked (`.vercel/project.json`). Vercel does not deploy when Bitbucket `main` moves. Ship with the Vercel CLI from this directory.
 
 1. Keep secrets out of git. `.env.local` is ignored. Never `git add` it.
 2. See what will ship:
@@ -27,8 +27,8 @@ git commit -m "Why this change is needed"
 npm run deploy
 ```
 
-5. Wait until the command prints `readyState: READY` and aliases `https://leads.schoolites.com`. Until then the previous deployment stays live.
-6. Open [https://leads.schoolites.com/login](https://leads.schoolites.com/login) and sign in with `admin@schoolites.com`. A code should arrive from Brevo.
+5. Wait until the command prints `readyState: READY` and aliases `https://join.schoolites.com`. Until then the previous deployment stays live.
+6. Open [https://join.schoolites.com/login](https://join.schoolites.com/login) and sign in with `admin@schoolites.com`. A code should arrive from Brevo.
 
 Changing only an environment variable does not redeploy. In the Vercel project **leads** → **Settings → Environment Variables**, update **Production**, then run `npm run deploy` again.
 
@@ -54,6 +54,7 @@ Copy `.env.example` to the host environment. Do not commit `.env.local`. Vercel 
 | `DATABASE_URL` | Postgres connection string. Include `sslmode=require` for Neon. The process exits if this is missing. |
 | `BREVO_API_KEY` | Brevo API key. Login codes are sent with Brevo's HTTP API. |
 | `MAIL_FROM` | From address, for example `Schoolites <noreply@yourdomain.com>`. That address must be a verified sender in Brevo. |
+| `NEXT_PUBLIC_APP_URL` | Base public URL (e.g. `https://join.schoolites.com`). Used for email verification, welcome links, and public referral domains. Defaults to `https://join.schoolites.com` in production if omitted. |
 
 ### Required for marketing uploads
 
@@ -77,7 +78,7 @@ Skip these only if nobody will upload brochures or images.
 
 These names appear in older docs. The application does not read them:
 
-`JWT_SECRET`, `AUTH_SECRET`, `DEV_AUTO_OTP`, `NEXT_PUBLIC_APP_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `RESEND_API_KEY`, `STORAGE_BUCKET`, `STORAGE_REGION`, `STORAGE_ENDPOINT`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`.
+`JWT_SECRET`, `AUTH_SECRET`, `DEV_AUTO_OTP`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `RESEND_API_KEY`, `STORAGE_BUCKET`, `STORAGE_REGION`, `STORAGE_ENDPOINT`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`.
 
 Sessions are random tokens stored in the `sessions` table. There is no signed JWT.
 

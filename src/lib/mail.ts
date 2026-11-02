@@ -88,7 +88,7 @@ export async function sendUserWelcomeEmail({ to, name, role, userCode }: UserWel
     return;
   }
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://join.schoolites.com').replace(/\/$/, '');
   const loginUrl = `${appUrl}/login`;
   const referralUrl = `${appUrl}/e/${userCode}`;
   const roleTitle = ROLE_LABELS[role] || role;
@@ -239,7 +239,7 @@ export async function sendEnquiryConfirmationEmail({
     return;
   }
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://join.schoolites.com').replace(/\/$/, '');
   const subject = `Thank you for contacting Schoolites [Ref: ${enquiryCode}]`;
 
   const textLines = [

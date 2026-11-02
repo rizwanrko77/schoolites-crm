@@ -435,7 +435,7 @@ export default function BusinessRelationsPage() {
 
   const publicLink = typeof window !== 'undefined'
     ? `${window.location.origin}/e/${user?.user_code}`
-    : `http://localhost:3000/e/${user?.user_code}`;
+    : `https://join.schoolites.com/e/${user?.user_code}`;
 
   const statusColorMap: Record<string, string> = {
     unassigned: '#f59e0b',
