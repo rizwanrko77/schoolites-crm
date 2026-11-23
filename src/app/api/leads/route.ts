@@ -316,17 +316,24 @@ export async function POST(req: NextRequest) {
     const finalSlotMode = rawMode && validModes.includes(rawMode) ? rawMode : null;
 
 
-    // 1. Duplicate Detection Check
-    // Checks if spoc_phone or spoc_email already exists in leads table
+    // 1. Robust Duplicate Detection Check
+    // Checks if phone (normalized digits / last 10 digits), email, or institute name + city already exists in leads table
     const normalizedSpocEmail = spoc_email ? spoc_email.trim().toLowerCase() : null;
+    const cleanLast10Phone = cleanSpocPhone.length >= 10 ? cleanSpocPhone.slice(-10) : cleanSpocPhone;
+    const normalizedInstitute = institute_name.trim().toLowerCase();
+    const normalizedCity = city ? city.trim().toLowerCase() : '';
     let duplicateOfLeadId: string | null = null;
     let isDuplicate = false;
 
     const existingMatch = await sql`
       SELECT id, lead_code, institute_name, created_at
       FROM leads
-      WHERE spoc_phone = ${cleanSpocPhone}
-         OR (spoc_email IS NOT NULL AND LOWER(spoc_email) = ${normalizedSpocEmail})
+      WHERE (
+        regexp_replace(spoc_phone, '[^0-9]', '', 'g') = ${cleanSpocPhone}
+        OR (LENGTH(regexp_replace(spoc_phone, '[^0-9]', '', 'g')) >= 10 AND RIGHT(regexp_replace(spoc_phone, '[^0-9]', '', 'g'), 10) = ${cleanLast10Phone})
+        OR (${normalizedSpocEmail}::text IS NOT NULL AND spoc_email IS NOT NULL AND LOWER(TRIM(spoc_email)) = ${normalizedSpocEmail})
+        OR (LOWER(TRIM(institute_name)) = ${normalizedInstitute} AND (${normalizedCity}::text != '' AND LOWER(TRIM(city)) = ${normalizedCity}))
+      )
       LIMIT 1
     `;
 

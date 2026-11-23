@@ -620,6 +620,7 @@ export default function BusinessRelationsPage() {
               placeholder="Search by code, institute, city, SPOC, phone, email, manager..."
               totalCount={leads.length}
               filteredCount={sortedLeads.length}
+              showStatusFilter={activeTab !== 'unassigned'}
             />
 
             {/* Leads Table */}

@@ -377,6 +377,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
     let callbackCount = 0;
     let convertedCount = 0;
     let interestedCount = 0;
+    let followingUpCount = 0;
     let rnrCount = 0;
     let switchedOffCount = 0;
     let notInterestedCount = 0;
@@ -400,6 +401,8 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
         callbackCount++;
       } else if (st === 'interested') {
         interestedCount++;
+      } else if (st === 'following_up') {
+        followingUpCount++;
       } else if (st === 'rnr') {
         rnrCount++;
       } else if (st === 'switched_off') {
@@ -417,6 +420,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
       callbackCount,
       convertedCount,
       interestedCount,
+      followingUpCount,
       rnrCount,
       switchedOffCount,
       notInterestedCount,
@@ -445,6 +449,8 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
           if (st !== 'assigned' && st !== 'fresh' && st !== 'new' && st !== 'unassigned') return false;
         } else if (dbStatusFilter === 'callback') {
           if (st !== 'callback' && st !== 'contact_later') return false;
+        } else if (dbStatusFilter === 'following_up') {
+          if (st !== 'following_up') return false;
         } else if (dbStatusFilter === 'switched_off') {
           if (st !== 'switched_off') return false;
         } else if (dbStatusFilter === 'worked_today') {
@@ -843,7 +849,11 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
               {dbAssignedStats.total}
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              <span style={{ color: '#34d399', fontWeight: 600 }}>{dbAssignedStats.workedToday} Worked Today</span> • {dbAssignedStats.callbackCount} Callbacks
+              <span style={{ color: '#34d399', fontWeight: 600 }}>{dbAssignedStats.workedToday} Worked Today</span>
+              {databaseMetrics?.todayChangesCount ? (
+                <span style={{ opacity: 0.85 }}> ({databaseMetrics.todayChangesCount} actions)</span>
+              ) : null}{' '}
+              • {dbAssignedStats.callbackCount} Callbacks
             </div>
           </div>
         )}
@@ -1096,7 +1106,9 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                 {dbAssignedStats.workedToday}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Updated since 00:00 IST
+                {databaseMetrics?.todayChangesCount
+                  ? `${dbAssignedStats.workedToday} unique places (${databaseMetrics.todayChangesCount} total actions logged today)`
+                  : 'Updated since 00:00 IST'}
               </div>
             </div>
 
@@ -1297,6 +1309,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                       { id: 'worked_today', label: `Worked Today (${dbAssignedStats.workedToday})` },
                       { id: 'assigned', label: `Fresh (${dbAssignedStats.freshCount})` },
                       { id: 'callback', label: `Callback (${dbAssignedStats.callbackCount})` },
+                      { id: 'following_up', label: `Following Up (${dbAssignedStats.followingUpCount})` },
                       { id: 'interested', label: `Interested (${dbAssignedStats.interestedCount})` },
                       { id: 'rnr', label: `RNR (${dbAssignedStats.rnrCount})` },
                       { id: 'switched_off', label: `Switched Off (${dbAssignedStats.switchedOffCount})` },

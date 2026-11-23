@@ -14,6 +14,7 @@ export interface LeadTableControlsProps {
   placeholder?: string;
   totalCount?: number;
   filteredCount?: number;
+  showStatusFilter?: boolean;
 }
 
 export default function LeadTableControls({
@@ -27,6 +28,7 @@ export default function LeadTableControls({
   placeholder = 'Search by code, institute, city, SPOC, phone, email...',
   totalCount,
   filteredCount,
+  showStatusFilter = true,
 }: LeadTableControlsProps) {
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const statusPopoverRef = useRef<HTMLDivElement>(null);
@@ -138,8 +140,26 @@ export default function LeadTableControls({
 
       {/* Right Controls: Status Filter, Sort Dropdown, Clear All */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        {/* Status Multi-Select Filter Popover */}
-        <div style={{ position: 'relative' }} ref={statusPopoverRef}>
+        {showStatusFilter === false ? (
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 14px',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              background: 'rgba(245, 158, 11, 0.12)',
+              color: '#fbbf24',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+            }}
+          >
+            <span>⚡</span>
+            <span>Pool: Unassigned Only</span>
+          </div>
+        ) : (
+          <div style={{ position: 'relative' }} ref={statusPopoverRef}>
           <button
             type="button"
             onClick={() => setIsStatusOpen(!isStatusOpen)}
@@ -272,6 +292,7 @@ export default function LeadTableControls({
             </div>
           )}
         </div>
+        )}
 
         {/* Sort Dropdown */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

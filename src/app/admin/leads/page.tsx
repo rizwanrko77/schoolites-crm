@@ -371,6 +371,7 @@ export default function AdminLeadsPage() {
         placeholder="Search by code, institute, city, SPOC, phone, email, manager..."
         totalCount={leads.length}
         filteredCount={filteredLeads.length}
+        showStatusFilter={tabFilter !== 'unassigned'}
       />
 
       {/* Leads Table */}
