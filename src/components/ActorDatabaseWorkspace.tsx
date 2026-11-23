@@ -20,6 +20,11 @@ interface PlaceRecord {
   postal_code: string | null;
   country: string | null;
   business_status: string | null;
+  regular_opening_hours?: any | null;
+  type_tags?: string[] | null;
+  search_keyword?: string | null;
+  search_city?: string | null;
+  search_area?: string | null;
   status: string;
   assigned_at: string | null;
   last_contacted_at: string | null;
@@ -35,8 +40,32 @@ interface ActorDatabaseWorkspaceProps {
   onConvertToLead: (place: PlaceRecord) => void;
 }
 
+function parseOpeningHours(hours: any): { isAvailable: boolean; weekdayList: string[]; rawText?: string } {
+  if (!hours) return { isAvailable: false, weekdayList: [] };
+  if (typeof hours === 'string' && hours.trim()) {
+    try {
+      const parsed = JSON.parse(hours);
+      return parseOpeningHours(parsed);
+    } catch {
+      return { isAvailable: true, weekdayList: [], rawText: hours };
+    }
+  }
+  if (Array.isArray(hours.weekdayDescriptions) && hours.weekdayDescriptions.length > 0) {
+    return { isAvailable: true, weekdayList: hours.weekdayDescriptions };
+  }
+  if (typeof hours.raw === 'string' && hours.raw.trim()) {
+    return { isAvailable: true, weekdayList: [], rawText: hours.raw };
+  }
+  if (Array.isArray(hours) && hours.length > 0) {
+    return { isAvailable: true, weekdayList: hours.map(String) };
+  }
+  return { isAvailable: false, weekdayList: [] };
+}
+
+type SubTabType = 'all' | 'new' | 'assigned';
+
 export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorDatabaseWorkspaceProps) {
-  const [subTab, setSubTab] = useState<'new' | 'assigned'>('new');
+  const [subTab, setSubTabState] = useState<SubTabType>('all');
   const [records, setRecords] = useState<PlaceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({
@@ -47,6 +76,35 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
   });
   const [pendingRequest, setPendingRequest] = useState<any | null>(null);
   const [cities, setCities] = useState<string[]>([]);
+
+  // Hydrate subTab safely from sessionStorage or URL
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const urlSubTab = new URLSearchParams(window.location.search).get('subtab') as SubTabType;
+      if (urlSubTab && ['all', 'new', 'assigned'].includes(urlSubTab)) {
+        setSubTabState(urlSubTab);
+        return;
+      }
+      const saved = sessionStorage.getItem('actor_db_subtab') as SubTabType;
+      if (saved && ['all', 'new', 'assigned'].includes(saved)) {
+        setSubTabState(saved);
+        return;
+      }
+    } catch {}
+  }, []);
+
+  const setSubTab = (tab: SubTabType) => {
+    setSubTabState(tab);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('actor_db_subtab', tab);
+        const url = new URL(window.location.href);
+        url.searchParams.set('subtab', tab);
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
+    }
+  };
 
   // Filters
   const [search, setSearch] = useState('');
@@ -77,7 +135,7 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
       params.append('tab', subTab);
       if (search.trim()) params.append('search', search.trim());
       if (cityFilter !== 'all') params.append('city', cityFilter);
-      if (subTab === 'assigned' && statusFilter !== 'all') {
+      if ((subTab === 'assigned' || subTab === 'all') && statusFilter !== 'all') {
         params.append('status', statusFilter);
       }
 
@@ -88,6 +146,14 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
       setMetrics(data.metrics || metrics);
       setPendingRequest(data.pendingRequest || null);
       setCities(data.cities || []);
+
+      // If user had no stored preference and unworked_count is 0 but has assigned leads, guide them to 'all'
+      if (typeof window !== 'undefined' && !sessionStorage.getItem('actor_db_subtab')) {
+        if (subTab === 'new' && data.metrics?.unworked_count === 0 && data.metrics?.total_assigned > 0) {
+          setSubTab('all');
+          return;
+        }
+      }
 
       // Initialize notes
       const initialNotes: Record<string, string> = {};
@@ -376,7 +442,30 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '2px' }}>
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '2px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => {
+            setSubTab('all');
+            setStatusFilter('all');
+          }}
+          style={{
+            padding: '10px 18px',
+            fontSize: '0.88rem',
+            fontWeight: 700,
+            background: 'none',
+            border: 'none',
+            borderBottom: subTab === 'all' ? '2px solid #6366f1' : '2px solid transparent',
+            color: subTab === 'all' ? '#ffffff' : 'var(--text-muted)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+        >
+          <span>🏢</span>
+          <span>All Assigned Leads ({metrics.total_assigned})</span>
+        </button>
+
         <button
           onClick={() => {
             setSubTab('new');
@@ -397,7 +486,7 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
           }}
         >
           <span>📋</span>
-          <span>New Data ({metrics.unworked_count})</span>
+          <span>New Queue ({metrics.unworked_count})</span>
         </button>
 
         <button
@@ -420,7 +509,7 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
           }}
         >
           <span>🎯</span>
-          <span>Assigned Database / Pipeline ({metrics.active_outreach_count + metrics.converted_count})</span>
+          <span>Active Pipeline ({metrics.active_outreach_count + metrics.converted_count})</span>
         </button>
       </div>
 
@@ -463,7 +552,7 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
             </select>
           </div>
 
-          {subTab === 'assigned' && (
+          {(subTab === 'assigned' || subTab === 'all') && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <label style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Outreach Status:</label>
               <select
@@ -510,15 +599,37 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
           <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
             <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📭</div>
             <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#ffffff', marginBottom: '4px' }}>
-              {subTab === 'new' ? 'No New Unworked Prospects' : 'No Outreach Records Found'}
+              {subTab === 'new' ? 'No New Unworked Prospects' : subTab === 'all' ? 'No Assigned Prospects Found' : 'No Outreach Records Found'}
             </h4>
-            <p style={{ fontSize: '0.86rem', maxWidth: '400px', margin: '0 auto' }}>
+            <p style={{ fontSize: '0.86rem', maxWidth: '440px', margin: '0 auto' }}>
               {subTab === 'new'
-                ? isLowQueue
+                ? metrics.total_assigned > 0
+                  ? `All assigned prospects have been contacted! You currently have ${metrics.active_outreach_count} records in your Active Pipeline.`
+                  : isLowQueue
                   ? 'Your unworked queue is clear. Click "Request More Data" above to receive a new batch from the central pool.'
                   : 'All assigned records have been contacted or moved into your outreach pipeline.'
-                : 'No records matching your search filters.'}
+                : 'No records matching your search or stage filters.'}
             </p>
+            {subTab === 'new' && metrics.total_assigned > 0 && (
+              <div style={{ marginTop: '16px', display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setSubTab('assigned')}
+                  className="btn-primary"
+                  style={{ padding: '8px 18px', fontSize: '0.84rem' }}
+                >
+                  View Active Pipeline ({metrics.active_outreach_count + metrics.converted_count}) ➔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubTab('all')}
+                  className="btn-secondary"
+                  style={{ padding: '8px 18px', fontSize: '0.84rem' }}
+                >
+                  View All Assigned Data ({metrics.total_assigned})
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           records.map((place) => (
@@ -1032,7 +1143,79 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                   </a>
                 )}
               </div>
+
+              {/* Classification & Tags */}
+              {(inspectedPlace.primary_type || (inspectedPlace.type_tags && inspectedPlace.type_tags.length > 0)) && (
+                <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Classification &amp; Tags
+                  </span>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                    {inspectedPlace.primary_type && (
+                      <span style={{ padding: '3px 8px', background: 'rgba(99, 102, 241, 0.15)', color: '#a5b4fc', borderRadius: '4px', fontSize: '0.76rem', fontWeight: 700, border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                        {inspectedPlace.primary_type.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                    {inspectedPlace.type_tags?.filter((t) => t !== inspectedPlace.primary_type).map((tag, i) => (
+                      <span key={i} style={{ padding: '3px 8px', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)', borderRadius: '4px', fontSize: '0.76rem', border: '1px solid var(--border-subtle)' }}>
+                        {tag.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sourcing / Discovery Info */}
+              {(inspectedPlace.search_keyword || inspectedPlace.search_city || inspectedPlace.search_area) && (
+                <div style={{ gridColumn: 'span 2', padding: '10px 12px', background: 'rgba(0, 0, 0, 0.25)', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <span>Sourced Via: </span>
+                  {inspectedPlace.search_keyword && <strong style={{ color: '#ffffff' }}>"{inspectedPlace.search_keyword}" </strong>}
+                  {[inspectedPlace.search_area, inspectedPlace.search_city].filter(Boolean).length > 0 && (
+                    <span>in {[inspectedPlace.search_area, inspectedPlace.search_city].filter(Boolean).join(', ')}</span>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* School Working / Operating Hours */}
+            {(() => {
+              const hoursInfo = parseOpeningHours(inspectedPlace.regular_opening_hours);
+              if (!hoursInfo.isAvailable) return null;
+              return (
+                <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#38bdf8', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🕒</span> School Working / Operating Hours
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 600 }}>Active Schedule</span>
+                  </div>
+
+                  {hoursInfo.rawText ? (
+                    <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', padding: '8px 12px', background: 'rgba(0,0,0,0.25)', borderRadius: '6px' }}>
+                      {hoursInfo.rawText}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '6px' }}>
+                      {hoursInfo.weekdayList.map((desc, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            fontSize: '0.8rem',
+                            color: 'var(--text-secondary)',
+                            padding: '6px 10px',
+                            background: 'rgba(0, 0, 0, 0.25)',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255, 255, 255, 0.03)',
+                          }}
+                        >
+                          {desc}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Notes & Activity History */}
             <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '12px' }}>

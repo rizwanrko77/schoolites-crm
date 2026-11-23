@@ -134,7 +134,56 @@ export interface PayoutStats {
   totalCommissionUnbilled: number;
 }
 
-type TabType = 'overview' | 'enquiries' | 'leads' | 'business' | 'account';
+export interface DatabasePlaceHistoryItem {
+  id: string;
+  place_id: string;
+  business_id: string;
+  action: string;
+  old_status: string | null;
+  new_status: string | null;
+  notes: string | null;
+  metadata?: any;
+  created_at: string;
+  business_name?: string;
+  business_city?: string;
+  business_area?: string;
+  elapsed_seconds?: number | null;
+}
+
+export interface DatabaseMetrics {
+  hasAccess: boolean;
+  todayChangesCount: number;
+  todayStatusBreakdown: Record<string, number>;
+  averagePacingMinutes: number | null;
+  activeWorkingMinutes: number;
+  firstActivityToday: string | null;
+  lastActivityToday: string | null;
+  todayLogs: DatabasePlaceHistoryItem[];
+}
+
+export interface AssignedBusinessItem {
+  id: string;
+  place_id: string;
+  name: string;
+  city: string | null;
+  area: string | null;
+  primary_phone: string | null;
+  alternative_phone: string | null;
+  rating: number | null;
+  rating_count: number | null;
+  status: string;
+  assigned_at: string | null;
+  last_contacted_at: string | null;
+  callback_at: string | null;
+  notes: string | null;
+  converted_lead_id: string | null;
+  converted_lead_code: string | null;
+  maps_url?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+type TabType = 'overview' | 'database' | 'enquiries' | 'leads' | 'business' | 'account';
 
 export default function UserPerformancePage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -148,6 +197,16 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
   const [payouts, setPayouts] = useState<ActorPayoutItem[]>([]);
   const [payoutStats, setPayoutStats] = useState<PayoutStats | null>(null);
   const [payoutFilter, setPayoutFilter] = useState<'all' | 'pending_payout' | 'paid' | 'awaiting_school'>('all');
+
+  // Database activity & assigned records state
+  const [databaseMetrics, setDatabaseMetrics] = useState<DatabaseMetrics | null>(null);
+  const [assignedBusinesses, setAssignedBusinesses] = useState<AssignedBusinessItem[]>([]);
+  const [dbDateFilter, setDbDateFilter] = useState<'all' | 'today' | '7days' | 'month'>('all');
+  const [dbStatusFilter, setDbStatusFilter] = useState<string>('all');
+  const [dbSearchQuery, setDbSearchQuery] = useState('');
+  const [dbSubView, setDbSubView] = useState<'directory' | 'cadence'>('directory');
+  const [selectedDbBusiness, setSelectedDbBusiness] = useState<AssignedBusinessItem | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -245,6 +304,8 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
       setInvoices(data.invoices || []);
       setPayouts(data.payouts || []);
       setPayoutStats(data.payoutStats || null);
+      setDatabaseMetrics(data.databaseMetrics || null);
+      setAssignedBusinesses(data.assignedBusinesses || []);
     } catch (err: any) {
       setError(err.message || 'Error loading profile');
     } finally {
@@ -255,6 +316,199 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
   useEffect(() => {
     fetchUserData();
   }, [userId]);
+
+  const isDbActor = Boolean(user?.has_database_access || user?.role === 'pre_sales' || user?.role === 'referral');
+
+  const getDbStatusMeta = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'converted_to_lead':
+        return { label: 'Converted to Lead', bg: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: 'rgba(16, 185, 129, 0.35)' };
+      case 'interested':
+        return { label: 'Interested', bg: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee', border: 'rgba(6, 182, 212, 0.35)' };
+      case 'callback':
+      case 'contact_later':
+        return { label: 'Callback', bg: 'rgba(99, 102, 241, 0.15)', color: '#a5b4fc', border: 'rgba(99, 102, 241, 0.35)' };
+      case 'following_up':
+        return { label: 'Following Up', bg: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', border: 'rgba(168, 85, 247, 0.35)' };
+      case 'rnr':
+        return { label: 'RNR (No Answer)', bg: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: 'rgba(245, 158, 11, 0.35)' };
+      case 'switched_off':
+        return { label: 'Switched Off', bg: 'rgba(244, 63, 94, 0.15)', color: '#fb7185', border: 'rgba(244, 63, 94, 0.35)' };
+      case 'not_interested':
+        return { label: 'Not Interested', bg: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: 'rgba(239, 68, 68, 0.35)' };
+      case 'wrong_number':
+        return { label: 'Wrong Number', bg: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.35)' };
+      case 'note_added':
+        return { label: 'Note Logged', bg: 'rgba(148, 163, 184, 0.15)', color: '#cbd5e1', border: 'rgba(148, 163, 184, 0.35)' };
+      case 'assigned':
+      case 'fresh':
+      case 'new':
+      default:
+        return { label: 'Fresh / Assigned', bg: 'rgba(148, 163, 184, 0.1)', color: '#cbd5e1', border: 'rgba(148, 163, 184, 0.2)' };
+    }
+  };
+
+  const aggregatedStatusOutcomes = useMemo(() => {
+    const map = new Map<string, { label: string; count: number; bg: string; color: string; border: string }>();
+    Object.entries(databaseMetrics?.todayStatusBreakdown || {}).forEach(([st, cnt]) => {
+      const meta = getDbStatusMeta(st);
+      const existing = map.get(meta.label);
+      if (existing) {
+        existing.count += cnt;
+      } else {
+        map.set(meta.label, { label: meta.label, count: cnt, bg: meta.bg, color: meta.color, border: meta.border });
+      }
+    });
+    return Array.from(map.values());
+  }, [databaseMetrics?.todayStatusBreakdown]);
+
+  const formatElapsedSecs = (sec: number | null | undefined) => {
+    if (sec === null || sec === undefined) return null;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m === 0) return `${s}s`;
+    if (s === 0) return `${m}m`;
+    return `${m}m ${s}s`;
+  };
+
+  const dbAssignedStats = useMemo(() => {
+    const total = assignedBusinesses.length;
+    let workedToday = 0;
+    let callbackCount = 0;
+    let convertedCount = 0;
+    let interestedCount = 0;
+    let rnrCount = 0;
+    let switchedOffCount = 0;
+    let notInterestedCount = 0;
+    let freshCount = 0;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartTime = todayStart.getTime();
+
+    assignedBusinesses.forEach((b) => {
+      const contactTime = b.last_contacted_at ? new Date(b.last_contacted_at).getTime() : 0;
+      const updatedTime = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+      if (contactTime >= todayStartTime || updatedTime >= todayStartTime) {
+        workedToday++;
+      }
+
+      const st = (b.status || '').toLowerCase();
+      if (st === 'converted_to_lead' || Boolean(b.converted_lead_id)) {
+        convertedCount++;
+      } else if (st === 'callback' || st === 'contact_later' || Boolean(b.callback_at)) {
+        callbackCount++;
+      } else if (st === 'interested') {
+        interestedCount++;
+      } else if (st === 'rnr') {
+        rnrCount++;
+      } else if (st === 'switched_off') {
+        switchedOffCount++;
+      } else if (st === 'not_interested') {
+        notInterestedCount++;
+      } else if (st === 'assigned' || st === 'fresh' || st === 'new' || st === 'unassigned' || !b.last_contacted_at) {
+        freshCount++;
+      }
+    });
+
+    return {
+      total,
+      workedToday,
+      callbackCount,
+      convertedCount,
+      interestedCount,
+      rnrCount,
+      switchedOffCount,
+      notInterestedCount,
+      freshCount,
+    };
+  }, [assignedBusinesses]);
+
+  const filteredAssignedBusinesses = useMemo(() => {
+    return assignedBusinesses.filter((item) => {
+      // 1. Search Query
+      if (dbSearchQuery.trim()) {
+        const q = dbSearchQuery.toLowerCase();
+        const matchName = item.name?.toLowerCase().includes(q);
+        const matchCity = item.city?.toLowerCase().includes(q);
+        const matchArea = item.area?.toLowerCase().includes(q);
+        const matchPhone = item.primary_phone?.toLowerCase().includes(q) || item.alternative_phone?.toLowerCase().includes(q);
+        const matchNotes = item.notes?.toLowerCase().includes(q);
+        const matchLead = item.converted_lead_code?.toLowerCase().includes(q);
+        if (!matchName && !matchCity && !matchArea && !matchPhone && !matchNotes && !matchLead) return false;
+      }
+
+      // 2. Status Filter
+      if (dbStatusFilter !== 'all') {
+        const st = (item.status || '').toLowerCase();
+        if (dbStatusFilter === 'assigned') {
+          if (st !== 'assigned' && st !== 'fresh' && st !== 'new' && st !== 'unassigned') return false;
+        } else if (dbStatusFilter === 'callback') {
+          if (st !== 'callback' && st !== 'contact_later') return false;
+        } else if (dbStatusFilter === 'switched_off') {
+          if (st !== 'switched_off') return false;
+        } else if (dbStatusFilter === 'worked_today') {
+          const contactTime = item.last_contacted_at ? new Date(item.last_contacted_at).getTime() : 0;
+          const updatedTime = item.updated_at ? new Date(item.updated_at).getTime() : 0;
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          if (contactTime < todayStart.getTime() && updatedTime < todayStart.getTime()) return false;
+        } else {
+          if (st !== dbStatusFilter) return false;
+        }
+      }
+
+      // 3. Date Range Filter
+      if (dbDateFilter !== 'all') {
+        const itemDateStr = item.last_contacted_at || item.updated_at || item.assigned_at;
+        if (!itemDateStr) return false;
+        const itemTime = new Date(itemDateStr).getTime();
+        const now = Date.now();
+
+        if (dbDateFilter === 'today') {
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          if (itemTime < todayStart.getTime()) return false;
+        } else if (dbDateFilter === '7days') {
+          const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+          if (itemTime < sevenDaysAgo) return false;
+        } else if (dbDateFilter === 'month') {
+          const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+          if (itemTime < monthAgo) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [assignedBusinesses, dbSearchQuery, dbStatusFilter, dbDateFilter]);
+
+  const handleInspectLog = (log: DatabasePlaceHistoryItem) => {
+    const found = assignedBusinesses.find(b => b.place_id === log.place_id || b.id === log.business_id);
+    if (found) {
+      setSelectedDbBusiness(found);
+    } else {
+      setSelectedDbBusiness({
+        id: log.business_id || log.id,
+        place_id: log.place_id,
+        name: log.business_name || log.place_id,
+        city: log.business_city || null,
+        area: log.business_area || null,
+        primary_phone: null,
+        alternative_phone: null,
+        rating: null,
+        rating_count: null,
+        status: log.new_status || log.action,
+        assigned_at: null,
+        last_contacted_at: log.created_at,
+        callback_at: log.metadata?.callback_at || null,
+        notes: log.notes,
+        converted_lead_id: log.metadata?.lead_id || null,
+        converted_lead_code: log.metadata?.lead_code || null,
+        created_at: log.created_at,
+        updated_at: log.created_at,
+      });
+    }
+  };
 
   const handleOpenPayoutModal = (payout: ActorPayoutItem) => {
     setSelectedPayout(payout);
@@ -579,6 +833,20 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
             ₹{(payoutStats?.totalCommissionPaid || 0).toLocaleString('en-IN')} Paid • ₹{(payoutStats?.totalCommissionPendingPayout || 0).toLocaleString('en-IN')} Pending Transfer
           </div>
         </div>
+
+        {isDbActor && (
+          <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '3px solid #06b6d4' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+              Assigned Places DB Leads
+            </div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#38bdf8' }}>
+              {dbAssignedStats.total}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              <span style={{ color: '#34d399', fontWeight: 600 }}>{dbAssignedStats.workedToday} Worked Today</span> • {dbAssignedStats.callbackCount} Callbacks
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs Navigation Bar */}
@@ -593,6 +861,9 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
       >
         {[
           { id: 'overview', label: 'Performance Overview', icon: '📊' },
+          ...(isDbActor
+            ? [{ id: 'database', label: `Assigned Database (${assignedBusinesses.length})`, icon: '🏢' }]
+            : []),
           { id: 'enquiries', label: `Inbound Enquiries (${enquiries.length})`, icon: '📥' },
           { id: 'leads', label: `Pipeline Leads (${leads.length})`, icon: '🎯' },
           { id: 'business', label: `Commission Payouts (${payouts.length})`, icon: '💰' },
@@ -697,6 +968,748 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
               </div>
             </div>
           </div>
+
+          {/* Today's Database Status Outcomes Distribution (Presales & Referral actors) */}
+          {isDbActor && (
+            <div className="glass-panel" style={{ padding: '24px', gridColumn: '1 / -1', marginTop: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff' }}>🏢 Today's Database Status Outcomes</h3>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: '9999px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                      Today (IST)
+                    </span>
+                  </div>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '4px' }}>
+                    Breakdown of outreach status updates and outcomes logged by this actor today.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('database')}
+                  className="btn-secondary"
+                  style={{ padding: '7px 14px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <span>🏢 View Cadence & Assigned Leads ({assignedBusinesses.length})</span> <span>→</span>
+                </button>
+              </div>
+
+              {/* Status Outcome Distribution */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#ffffff' }}>Today's Status Outcome Distribution</div>
+                  <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                    Total: <strong>{databaseMetrics?.todayChangesCount || 0} transitions</strong>
+                  </span>
+                </div>
+
+                {/* Progress Distribution Bar */}
+                {(databaseMetrics?.todayChangesCount || 0) > 0 ? (
+                  <div style={{ width: '100%', height: '10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '5px', overflow: 'hidden', display: 'flex', marginBottom: '14px' }}>
+                    {aggregatedStatusOutcomes.map((item) => {
+                      const pct = Math.round((item.count / (databaseMetrics?.todayChangesCount || 1)) * 100);
+                      return (
+                        <div
+                          key={item.label}
+                          style={{
+                            width: `${pct}%`,
+                            height: '100%',
+                            background: item.color,
+                            transition: 'width 0.3s ease',
+                          }}
+                          title={`${item.label}: ${item.count} (${pct}%)`}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ width: '100%', height: '8px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', marginBottom: '14px' }} />
+                )}
+
+                {/* Outcome Badges Grid */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {aggregatedStatusOutcomes.length === 0 ? (
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      No status changes recorded for today yet.
+                    </span>
+                  ) : (
+                    aggregatedStatusOutcomes.map((item) => {
+                      const pct = Math.round((item.count / (databaseMetrics?.todayChangesCount || 1)) * 100);
+                      return (
+                        <div
+                          key={item.label}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '9999px',
+                            background: item.bg,
+                            border: `1px solid ${item.border}`,
+                            color: item.color,
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          <span>●</span>
+                          <span>{item.label}:</span>
+                          <strong style={{ color: '#ffffff' }}>{item.count}</strong>
+                          <span style={{ opacity: 0.7, fontSize: '0.72rem' }}>({pct}%)</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: ASSIGNED DATABASE */}
+      {activeTab === 'database' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* 5 KPI Metric Cards for Database */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '14px',
+            }}
+          >
+            <div className="glass-panel" style={{ padding: '16px 18px', borderLeft: '3px solid #38bdf8' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Total Assigned Leads
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#ffffff', marginTop: '6px' }}>
+                {dbAssignedStats.total}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Allocated to this member
+              </div>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '16px 18px', borderLeft: '3px solid #10b981' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#34d399', textTransform: 'uppercase' }}>
+                Worked / Contacted Today
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#34d399', marginTop: '6px' }}>
+                {dbAssignedStats.workedToday}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Updated since 00:00 IST
+              </div>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '16px 18px', borderLeft: '3px solid #818cf8' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#a5b4fc', textTransform: 'uppercase' }}>
+                Scheduled Callbacks
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#818cf8', marginTop: '6px' }}>
+                {dbAssignedStats.callbackCount}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Pending follow-up calls
+              </div>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '16px 18px', borderLeft: '3px solid #06b6d4' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#22d3ee', textTransform: 'uppercase' }}>
+                Interested Prospects
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#22d3ee', marginTop: '6px' }}>
+                {dbAssignedStats.interestedCount}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                High intent schools
+              </div>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '16px 18px', borderLeft: '3px solid #fbbf24' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#fbbf24', textTransform: 'uppercase' }}>
+                Places Converted to Leads
+              </div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fbbf24', marginTop: '6px' }}>
+                {dbAssignedStats.convertedCount}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {dbAssignedStats.convertedCount} of {dbAssignedStats.total} places ({stats?.totalLeads || 0} total CRM leads) 🎉
+              </div>
+            </div>
+          </div>
+
+          {/* Dialing Cadence Summary Bar */}
+          {(databaseMetrics?.todayChangesCount || 0) > 0 && (
+            <div
+              className="glass-panel"
+              style={{
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '16px',
+                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(56, 189, 248, 0.05) 100%)',
+                border: '1px solid rgba(99, 102, 241, 0.25)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    background: 'rgba(99, 102, 241, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.2rem',
+                  }}
+                >
+                  ⚡
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff' }}>
+                    Today's Dialing Cadence & Outreach Pace
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {databaseMetrics?.todayChangesCount} updates logged today • Active window:{' '}
+                    <span style={{ color: '#38bdf8', fontWeight: 600 }}>
+                      {databaseMetrics?.firstActivityToday
+                        ? new Date(databaseMetrics.firstActivityToday).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                        : '—'}{' '}
+                      –{' '}
+                      {databaseMetrics?.lastActivityToday
+                        ? new Date(databaseMetrics.lastActivityToday).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                        : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Avg Pace / Lead
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#38bdf8' }}>
+                    {databaseMetrics?.averagePacingMinutes ? `${databaseMetrics.averagePacingMinutes} mins` : '—'}
+                  </div>
+                </div>
+
+                <div style={{ width: '1px', height: '28px', background: 'var(--border-subtle)' }} />
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Active Dialing Time
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#34d399' }}>
+                    {databaseMetrics
+                      ? `${Math.floor((databaseMetrics.activeWorkingMinutes || 0) / 60)}h ${(databaseMetrics.activeWorkingMinutes || 0) % 60}m`
+                      : '0m'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Unified Database Sub-View Switcher (Directory vs Cadence) */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              borderBottom: '1px solid var(--border-subtle)',
+              paddingBottom: '12px',
+            }}
+          >
+            <div style={{ display: 'inline-flex', background: 'rgba(255, 255, 255, 0.03)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border-subtle)', gap: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setDbSubView('directory')}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '7px',
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: dbSubView === 'directory' ? '#6366f1' : 'transparent',
+                  color: dbSubView === 'directory' ? '#ffffff' : 'var(--text-secondary)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>🏢</span>
+                <span>Assigned Database Leads ({assignedBusinesses.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDbSubView('cadence')}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '7px',
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: dbSubView === 'cadence' ? '#6366f1' : 'transparent',
+                  color: dbSubView === 'cadence' ? '#ffffff' : 'var(--text-secondary)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>⚡</span>
+                <span>Today's Dialing Cadence & Transition Log ({databaseMetrics?.todayChangesCount || 0})</span>
+              </button>
+            </div>
+
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              {dbSubView === 'directory'
+                ? `Showing ${filteredAssignedBusinesses.length} of ${assignedBusinesses.length} assigned records`
+                : `${databaseMetrics?.todayChangesCount || 0} transitions recorded today`}
+            </div>
+          </div>
+
+          {/* SUB-VIEW 1: ASSIGNED DIRECTORY (FILTER BAR & RECORDS TABLE) */}
+          {dbSubView === 'directory' && (
+            <>
+              {/* Filter Bar & Controls */}
+              <div
+                className="glass-panel"
+                style={{
+                  padding: '16px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  {/* Quick Status Filter Tabs */}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'all', label: `All (${dbAssignedStats.total})` },
+                      { id: 'worked_today', label: `Worked Today (${dbAssignedStats.workedToday})` },
+                      { id: 'assigned', label: `Fresh (${dbAssignedStats.freshCount})` },
+                      { id: 'callback', label: `Callback (${dbAssignedStats.callbackCount})` },
+                      { id: 'interested', label: `Interested (${dbAssignedStats.interestedCount})` },
+                      { id: 'rnr', label: `RNR (${dbAssignedStats.rnrCount})` },
+                      { id: 'switched_off', label: `Switched Off (${dbAssignedStats.switchedOffCount})` },
+                      { id: 'not_interested', label: `Not Interested (${dbAssignedStats.notInterestedCount})` },
+                      { id: 'converted_to_lead', label: `Converted (${dbAssignedStats.convertedCount})` },
+                    ].map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => setDbStatusFilter(st.id)}
+                        style={{
+                          padding: '5px 12px',
+                          borderRadius: '9999px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: dbStatusFilter === st.id ? '1px solid #38bdf8' : '1px solid var(--border-subtle)',
+                          background: dbStatusFilter === st.id ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255, 255, 255, 0.03)',
+                          color: dbStatusFilter === st.id ? '#38bdf8' : 'var(--text-secondary)',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Date Range Selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Date Range:</span>
+                    {[
+                      { id: 'all', label: 'All Time' },
+                      { id: 'today', label: 'Today' },
+                      { id: '7days', label: 'Last 7 Days' },
+                      { id: 'month', label: 'This Month' },
+                    ].map((dr) => (
+                      <button
+                        key={dr.id}
+                        type="button"
+                        onClick={() => setDbDateFilter(dr.id as any)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: dbDateFilter === dr.id ? '1px solid #818cf8' : '1px solid transparent',
+                          background: dbDateFilter === dr.id ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                          color: dbDateFilter === dr.id ? '#ffffff' : 'var(--text-muted)',
+                        }}
+                      >
+                        {dr.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Search Input */}
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="🔍 Search assigned records by school name, city, area, phone, notes, or lead code..."
+                    value={dbSearchQuery}
+                    onChange={(e) => setDbSearchQuery(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '9px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid var(--border-subtle)',
+                      color: '#ffffff',
+                      fontSize: '0.86rem',
+                    }}
+                  />
+                  {dbSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setDbSearchQuery('')}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Assigned Records Table */}
+              <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>Assigned Database Leads</h3>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    Showing <strong>{filteredAssignedBusinesses.length}</strong> of {assignedBusinesses.length} records
+                  </span>
+                </div>
+
+                <div className="table-responsive">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                        <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Institution / Place</th>
+                        <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Phone Contacts</th>
+                        <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Status</th>
+                        <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Last Contact / Updated</th>
+                        <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Callback Due</th>
+                        <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Notes & Remarks</th>
+                        <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAssignedBusinesses.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            No assigned database records match the selected filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredAssignedBusinesses.map((item) => {
+                          const meta = getDbStatusMeta(item.status);
+                          const isCallbackPast = item.callback_at ? new Date(item.callback_at).getTime() < Date.now() : false;
+                          return (
+                            <tr key={item.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                              <td style={{ padding: '14px 18px' }}>
+                                <div style={{ fontWeight: 600, color: '#ffffff' }}>{item.name}</div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                  {item.area ? `${item.area}, ` : ''}{item.city || '—'}
+                                  {item.rating ? (
+                                    <span style={{ marginLeft: '6px', color: '#fbbf24' }}>
+                                      ★ {item.rating} ({item.rating_count || 0})
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {item.maps_url && (
+                                  <a
+                                    href={item.maps_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ fontSize: '0.72rem', color: '#38bdf8', textDecoration: 'none', display: 'inline-block', marginTop: '2px' }}
+                                  >
+                                    View Maps ↗
+                                  </a>
+                                )}
+                              </td>
+
+                              <td style={{ padding: '14px 18px' }}>
+                                {item.primary_phone ? (
+                                  <div>
+                                    <a
+                                      href={`tel:${item.primary_phone}`}
+                                      style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: 600, fontSize: '0.84rem' }}
+                                    >
+                                      📞 {item.primary_phone}
+                                    </a>
+                                  </div>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>No phone</span>
+                                )}
+                                {item.alternative_phone && (
+                                  <div style={{ fontSize: '0.75rem', marginTop: '2px' }}>
+                                    <a
+                                      href={`tel:${item.alternative_phone}`}
+                                      style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
+                                    >
+                                      Alt: {item.alternative_phone}
+                                    </a>
+                                  </div>
+                                )}
+                              </td>
+
+                              <td style={{ padding: '14px 18px' }}>
+                                <span
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.76rem',
+                                    fontWeight: 600,
+                                    background: meta.bg,
+                                    color: meta.color,
+                                    border: `1px solid ${meta.border}`,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                  }}
+                                >
+                                  <span>●</span>
+                                  <span>{meta.label}</span>
+                                </span>
+                                {item.converted_lead_code && (
+                                  <div style={{ marginTop: '4px' }}>
+                                    <Link
+                                      href={`/admin/leads?id=${item.converted_lead_id}`}
+                                      className="user-code-pill"
+                                      style={{ color: '#34d399', fontSize: '0.72rem', textDecoration: 'none' }}
+                                    >
+                                      🎯 {item.converted_lead_code}
+                                    </Link>
+                                  </div>
+                                )}
+                              </td>
+
+                              <td style={{ padding: '14px 18px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                {item.last_contacted_at ? (
+                                  <>
+                                    <div>{new Date(item.last_contacted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                      {new Date(item.last_contacted_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                    </div>
+                                  </>
+                                ) : item.updated_at ? (
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>
+                                    Updated {new Date(item.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.76rem' }}>Not contacted</span>
+                                )}
+                              </td>
+
+                              <td style={{ padding: '14px 18px' }}>
+                                {item.callback_at ? (
+                                  <span
+                                    style={{
+                                      padding: '3px 8px',
+                                      borderRadius: '6px',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 600,
+                                      background: isCallbackPast ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                      color: isCallbackPast ? '#f87171' : '#fbbf24',
+                                      border: `1px solid ${isCallbackPast ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                    }}
+                                  >
+                                    <span>⏰</span>
+                                    <span>
+                                      {new Date(item.callback_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}{' '}
+                                      {new Date(item.callback_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>—</span>
+                                )}
+                              </td>
+
+                              <td style={{ padding: '14px 18px', color: 'var(--text-secondary)', fontSize: '0.8rem', maxWidth: '240px' }}>
+                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.notes || ''}>
+                                  {item.notes || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No notes logged</span>}
+                                </div>
+                              </td>
+
+                              <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedDbBusiness(item)}
+                                  className="btn-secondary"
+                                  style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                                >
+                                  Inspect
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* SUB-VIEW 2: CADENCE & TRANSITION LOG */}
+          {dbSubView === 'cadence' && (
+            <div className="glass-panel" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>⚡ Sequential Activity & Cadence Log</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: '9999px', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                      Live Sequence
+                    </span>
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '2px' }}>
+                    Measures active dialing pace between consecutive updates and full sequential transition history today.
+                  </p>
+                </div>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  Total Actions Today: <strong>{databaseMetrics?.todayChangesCount || 0}</strong>
+                </span>
+              </div>
+
+              <div className="table-responsive">
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 0.02)' }}>
+                      <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Time</th>
+                      <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Institution / Lead</th>
+                      <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Status Transition</th>
+                      <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Time Taken / Cadence</th>
+                      <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase' }}>Calling Remarks</th>
+                      <th style={{ padding: '12px 18px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.76rem', textTransform: 'uppercase', textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!databaseMetrics?.todayLogs || databaseMetrics.todayLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          No outreach calls or status updates logged today yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      databaseMetrics.todayLogs.map((log) => {
+                        const fromMeta = log.old_status ? getDbStatusMeta(log.old_status) : null;
+                        const toMeta = getDbStatusMeta(log.new_status || log.action);
+                        return (
+                          <tr key={log.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                            <td style={{ padding: '14px 18px', fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                              {new Date(log.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </td>
+
+                            <td style={{ padding: '14px 18px' }}>
+                              <div style={{ fontWeight: 600, color: '#ffffff' }}>
+                                {log.business_name || 'Institution'}
+                              </div>
+                              <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                {log.business_area ? `${log.business_area}, ` : ''}{log.business_city || ''}
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '14px 18px' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                {fromMeta && (
+                                  <>
+                                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                                      {fromMeta.label}
+                                    </span>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>→</span>
+                                  </>
+                                )}
+                                <span
+                                  style={{
+                                    padding: '3px 8px',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 600,
+                                    background: toMeta.bg,
+                                    color: toMeta.color,
+                                    border: `1px solid ${toMeta.border}`,
+                                  }}
+                                >
+                                  {toMeta.label}
+                                </span>
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '14px 18px' }}>
+                              {log.elapsed_seconds ? (
+                                <span
+                                  style={{
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 600,
+                                    background: 'rgba(56, 189, 248, 0.12)',
+                                    color: '#38bdf8',
+                                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                  }}
+                                >
+                                  <span>⏱</span>
+                                  <span>{formatElapsedSecs(log.elapsed_seconds)}</span>
+                                </span>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>—</span>
+                              )}
+                            </td>
+
+                            <td style={{ padding: '14px 18px', color: 'var(--text-secondary)', fontSize: '0.8rem', maxWidth: '300px' }}>
+                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes || ''}>
+                                {log.notes || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>—</span>}
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleInspectLog(log)}
+                                className="btn-secondary"
+                                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                              >
+                                Inspect
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1947,6 +2960,191 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
               <button onClick={() => setSelectedEnquiry(null)} className="btn-secondary" style={{ padding: '8px 20px', fontSize: '0.88rem' }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INSPECT ASSIGNED DATABASE RECORD MODAL */}
+      {selectedDbBusiness && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(5, 8, 16, 0.78)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px',
+            animation: 'fadeIn 0.2s ease',
+          }}
+          onClick={() => setSelectedDbBusiness(null)}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: '100%',
+              maxWidth: '640px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px',
+              padding: '24px',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '16px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '9999px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      background: getDbStatusMeta(selectedDbBusiness.status).bg,
+                      color: getDbStatusMeta(selectedDbBusiness.status).color,
+                      border: `1px solid ${getDbStatusMeta(selectedDbBusiness.status).border}`,
+                    }}
+                  >
+                    ● {getDbStatusMeta(selectedDbBusiness.status).label}
+                  </span>
+                  {selectedDbBusiness.converted_lead_code && (
+                    <span className="user-code-pill" style={{ color: '#34d399', fontSize: '0.72rem' }}>
+                      🎯 CRM Lead: {selectedDbBusiness.converted_lead_code}
+                    </span>
+                  )}
+                </div>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ffffff', marginTop: '8px' }}>
+                  {selectedDbBusiness.name}
+                </h2>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {selectedDbBusiness.area ? `${selectedDbBusiness.area}, ` : ''}{selectedDbBusiness.city || '—'}
+                  {selectedDbBusiness.rating ? (
+                    <span style={{ marginLeft: '8px', color: '#fbbf24' }}>
+                      ★ {selectedDbBusiness.rating} ({selectedDbBusiness.rating_count || 0} reviews)
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedDbBusiness(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-muted)',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Contact details */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px', background: 'rgba(255, 255, 255, 0.02)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Primary Phone</div>
+                <div style={{ fontSize: '0.9rem', color: '#38bdf8', marginTop: '2px', fontWeight: 600 }}>
+                  {selectedDbBusiness.primary_phone ? (
+                    <a href={`tel:${selectedDbBusiness.primary_phone}`} style={{ color: '#38bdf8', textDecoration: 'none' }}>
+                      📞 {selectedDbBusiness.primary_phone}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Alternative Phone</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginTop: '2px' }}>
+                  {selectedDbBusiness.alternative_phone ? (
+                    <a href={`tel:${selectedDbBusiness.alternative_phone}`} style={{ color: 'var(--text-primary)', textDecoration: 'none' }}>
+                      📞 {selectedDbBusiness.alternative_phone}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Assigned On</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {selectedDbBusiness.assigned_at
+                    ? new Date(selectedDbBusiness.assigned_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : '—'}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Last Contacted</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {selectedDbBusiness.last_contacted_at
+                    ? `${new Date(selectedDbBusiness.last_contacted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at ${new Date(selectedDbBusiness.last_contacted_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+                    : 'Not Contacted Yet'}
+                </div>
+              </div>
+            </div>
+
+            {/* Scheduled Callback info */}
+            {selectedDbBusiness.callback_at && (
+              <div style={{ padding: '14px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ fontSize: '0.75rem', color: '#fbbf24', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>
+                  ⏰ Scheduled Follow-Up / Callback
+                </div>
+                <div style={{ fontSize: '0.92rem', color: '#ffffff', fontWeight: 600 }}>
+                  {new Date(selectedDbBusiness.callback_at).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}{' '}
+                  at {new Date(selectedDbBusiness.callback_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            )}
+
+            {/* Calling Notes & Remarks */}
+            <div style={{ padding: '16px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Actor Calling Remarks / History Notes
+              </div>
+              <p style={{ fontSize: '0.88rem', color: selectedDbBusiness.notes ? '#ffffff' : 'var(--text-muted)', margin: 0, lineHeight: 1.5, fontStyle: selectedDbBusiness.notes ? 'normal' : 'italic' }}>
+                {selectedDbBusiness.notes || 'No remarks recorded yet for this institution.'}
+              </p>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {selectedDbBusiness.maps_url && (
+                  <a
+                    href={selectedDbBusiness.maps_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary"
+                    style={{ padding: '7px 14px', fontSize: '0.8rem', textDecoration: 'none' }}
+                  >
+                    Google Maps ↗
+                  </a>
+                )}
+                {selectedDbBusiness.converted_lead_id && (
+                  <Link
+                    href={`/admin/leads?id=${selectedDbBusiness.converted_lead_id}`}
+                    className="btn-secondary"
+                    style={{ padding: '7px 14px', fontSize: '0.8rem', textDecoration: 'none', color: '#34d399' }}
+                  >
+                    Open CRM Lead ↗
+                  </Link>
+                )}
+              </div>
+
+              <button onClick={() => setSelectedDbBusiness(null)} className="btn-secondary" style={{ padding: '8px 20px', fontSize: '0.88rem' }}>
                 Close
               </button>
             </div>

@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const countRes = await sql`
       SELECT COUNT(*)::int as remaining_count
       FROM db_businesses
-      WHERE assigned_to_user_id = ${currentUser.id} AND status = 'new';
+      WHERE assigned_to_user_id = ${currentUser.id} AND status IN ('new', 'fresh', 'unassigned', 'assigned');
     `;
     const remainingCount = countRes[0]?.remaining_count || 0;
 

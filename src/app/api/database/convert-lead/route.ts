@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     const leadRes = await sql`
-      SELECT id, lead_code, owner_id
+      SELECT id, lead_code, owner_id, promoter_id
       FROM leads
       WHERE id = ${lead_id}
       LIMIT 1
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
     }
     const linkedLead = leadRes[0];
-    if (currentUser.role !== 'admin' && linkedLead.owner_id !== currentUser.id) {
+    if (currentUser.role !== 'admin' && linkedLead.owner_id !== currentUser.id && linkedLead.promoter_id !== currentUser.id) {
       return NextResponse.json(
         { error: 'You can only attach a lead you created.' },
         { status: 403 }

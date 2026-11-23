@@ -181,6 +181,115 @@ export async function GET(
     }, 0);
     const totalCommissionUnbilled = Math.max(0, totalCommissionPotential - (totalCommissionEarned + totalCommissionPendingInvoice));
 
+    // 6. Fetch database metrics & assigned businesses for database-eligible actors (pre_sales, referral, or explicit access)
+    const isDbActor = Boolean(user.has_database_access || user.role === 'pre_sales' || user.role === 'referral');
+    let databaseMetrics = null;
+    let assignedBusinesses: any[] = [];
+
+    if (isDbActor) {
+      // Calculate start of today in Indian Standard Time (UTC+05:30)
+      const now = new Date();
+      const istOffsetMs = 5.5 * 60 * 60 * 1000;
+      const istDate = new Date(now.getTime() + istOffsetMs);
+      const yyyy = istDate.getUTCFullYear();
+      const mm = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(istDate.getUTCDate()).padStart(2, '0');
+      const todayMidnightIST = `${yyyy}-${mm}-${dd}T00:00:00+05:30`;
+
+      // A. Query today's status change actions by this actor (ordered chronologically for accurate pacing)
+      const todayLogs = await sql`
+        SELECT h.id, h.place_id, h.business_id, h.action, h.old_status, h.new_status, h.notes, h.metadata, h.created_at,
+               b.name as business_name, b.city as business_city, b.area as business_area
+        FROM db_place_history h
+        LEFT JOIN db_businesses b ON h.place_id = b.place_id
+        WHERE h.actor_id = ${userId}
+          AND h.created_at >= ${todayMidnightIST}::timestamptz
+        ORDER BY h.created_at ASC
+      `;
+
+      // Compute dialing pace & consecutive time differences
+      let prevTime: number | null = null;
+      let prevPlaceId: string | null = null;
+      const enrichedLogs = todayLogs.map((log: any) => {
+        const curTime = new Date(log.created_at).getTime();
+        let elapsedSeconds: number | null = null;
+        if (prevTime !== null) {
+          const diffSec = Math.round((curTime - prevTime) / 1000);
+          // If within 45 minutes, consider it active continuous dialing
+          // Ignore sub-10 second duplicate saves on the same place to prevent skewing pacing metrics
+          if (diffSec >= 10 && diffSec <= 45 * 60) {
+            elapsedSeconds = diffSec;
+          } else if (diffSec < 10 && log.place_id !== prevPlaceId && diffSec >= 4) {
+            elapsedSeconds = diffSec;
+          }
+        }
+        prevTime = curTime;
+        prevPlaceId = log.place_id;
+        return {
+          id: log.id,
+          place_id: log.place_id,
+          business_id: log.business_id,
+          action: log.action,
+          old_status: log.old_status,
+          new_status: log.new_status,
+          notes: log.notes,
+          metadata: log.metadata,
+          created_at: log.created_at,
+          business_name: log.business_name,
+          business_city: log.business_city,
+          business_area: log.business_area,
+          elapsed_seconds: elapsedSeconds,
+        };
+      });
+
+      // Breakdown of status transitions today
+      const todayStatusBreakdown: Record<string, number> = {};
+      enrichedLogs.forEach((log: any) => {
+        let st = (log.new_status || log.action || 'updated').toLowerCase();
+        if (st === 'contact_later') st = 'callback';
+        // If note was added without changing status from new/fresh/assigned, categorize as note_added rather than fresh/assigned
+        if (log.action === 'note_added' && (st === 'new' || st === 'fresh' || st === 'assigned')) {
+          st = 'note_added';
+        }
+        todayStatusBreakdown[st] = (todayStatusBreakdown[st] || 0) + 1;
+      });
+
+      const validPacingSecs = enrichedLogs
+        .map((l: any) => l.elapsed_seconds)
+        .filter((sec: any): sec is number => typeof sec === 'number' && sec > 0);
+
+      const averagePacingMinutes = validPacingSecs.length > 0
+        ? Number((validPacingSecs.reduce((a: number, b: number) => a + b, 0) / validPacingSecs.length / 60).toFixed(1))
+        : null;
+
+      const activeWorkingMinutes = validPacingSecs.length > 0
+        ? Math.round(validPacingSecs.reduce((a: number, b: number) => a + b, 0) / 60)
+        : 0;
+
+      databaseMetrics = {
+        hasAccess: Boolean(user.has_database_access),
+        todayChangesCount: enrichedLogs.length,
+        todayStatusBreakdown,
+        averagePacingMinutes,
+        activeWorkingMinutes,
+        firstActivityToday: enrichedLogs.length > 0 ? enrichedLogs[0].created_at : null,
+        lastActivityToday: enrichedLogs.length > 0 ? enrichedLogs[enrichedLogs.length - 1].created_at : null,
+        todayLogs: [...enrichedLogs].reverse(), // Reverse for reverse-chronological UI timeline
+      };
+
+      // B. Fetch all assigned businesses for this actor
+      assignedBusinesses = await sql`
+        SELECT b.id, b.place_id, b.name, b.city, b.area, b.primary_phone, b.alternative_phone,
+               b.rating, b.rating_count, b.status, b.assigned_at, b.last_contacted_at,
+               b.callback_at, b.notes, b.converted_lead_id, l.lead_code as converted_lead_code,
+               b.maps_url, b.created_at, b.updated_at
+        FROM db_businesses b
+        LEFT JOIN leads l ON b.converted_lead_id = l.id
+        WHERE b.assigned_to_user_id = ${userId}
+        ORDER BY b.updated_at DESC
+      `;
+    }
+
     return NextResponse.json({
       user,
       stats: {
@@ -203,6 +312,8 @@ export async function GET(
         totalCommissionPendingInvoice: Number(totalCommissionPendingInvoice.toFixed(2)),
         totalCommissionUnbilled: Number(totalCommissionUnbilled.toFixed(2)),
       },
+      databaseMetrics,
+      assignedBusinesses,
       enquiries,
       leads,
       invoices,

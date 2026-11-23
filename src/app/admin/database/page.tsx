@@ -42,6 +42,29 @@ interface PlaceRecord {
   assigned_user_role?: string | null;
   converted_lead_code?: string | null;
   converted_lead_status?: string | null;
+  raw_payload?: any;
+}
+
+function parseOpeningHours(hours: any): { isAvailable: boolean; weekdayList: string[]; rawText?: string } {
+  if (!hours) return { isAvailable: false, weekdayList: [] };
+  if (typeof hours === 'string' && hours.trim()) {
+    try {
+      const parsed = JSON.parse(hours);
+      return parseOpeningHours(parsed);
+    } catch {
+      return { isAvailable: true, weekdayList: [], rawText: hours };
+    }
+  }
+  if (Array.isArray(hours.weekdayDescriptions) && hours.weekdayDescriptions.length > 0) {
+    return { isAvailable: true, weekdayList: hours.weekdayDescriptions };
+  }
+  if (typeof hours.raw === 'string' && hours.raw.trim()) {
+    return { isAvailable: true, weekdayList: [], rawText: hours.raw };
+  }
+  if (Array.isArray(hours) && hours.length > 0) {
+    return { isAvailable: true, weekdayList: hours.map(String) };
+  }
+  return { isAvailable: false, weekdayList: [] };
 }
 
 interface PlaceHistoryItem {
@@ -1404,7 +1427,104 @@ export default function AdminDatabasePage() {
                       </a>
                     )}
                   </div>
+
+                  {/* Classification & Tags */}
+                  {(drawerPlace.primary_type || (drawerPlace.type_tags && drawerPlace.type_tags.length > 0)) && (
+                    <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                        Classification &amp; Tags
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                        {drawerPlace.primary_type && (
+                          <span style={{ padding: '2px 8px', background: 'rgba(99, 102, 241, 0.15)', color: '#a5b4fc', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                            {drawerPlace.primary_type.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                        {drawerPlace.type_tags?.filter((t) => t !== drawerPlace.primary_type).map((tag, i) => (
+                          <span key={i} style={{ padding: '2px 8px', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)', borderRadius: '4px', fontSize: '0.75rem', border: '1px solid var(--border-subtle)' }}>
+                            {tag.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sourcing / Discovery Info */}
+                  {(drawerPlace.search_keyword || drawerPlace.search_city || drawerPlace.search_area) && (
+                    <div style={{ gridColumn: 'span 2', padding: '8px 12px', background: 'rgba(0, 0, 0, 0.25)', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      <span>Sourced via: </span>
+                      {drawerPlace.search_keyword && <strong style={{ color: '#ffffff' }}>"{drawerPlace.search_keyword}" </strong>}
+                      {[drawerPlace.search_area, drawerPlace.search_city].filter(Boolean).length > 0 && (
+                        <span>in {[drawerPlace.search_area, drawerPlace.search_city].filter(Boolean).join(', ')}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
+
+                {/* School Working / Operating Hours */}
+                {(() => {
+                  const hoursInfo = parseOpeningHours(drawerPlace.regular_opening_hours);
+                  if (!hoursInfo.isAvailable) return null;
+                  return (
+                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '0.76rem', color: '#38bdf8', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>🕒</span> School Working / Operating Hours
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 600 }}>Active Schedule</span>
+                      </div>
+
+                      {hoursInfo.rawText ? (
+                        <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', padding: '6px 10px', background: 'rgba(0,0,0,0.25)', borderRadius: '6px' }}>
+                          {hoursInfo.rawText}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '6px' }}>
+                          {hoursInfo.weekdayList.map((desc, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                fontSize: '0.78rem',
+                                color: 'var(--text-secondary)',
+                                padding: '6px 8px',
+                                background: 'rgba(0, 0, 0, 0.25)',
+                                borderRadius: '4px',
+                                border: '1px solid rgba(255, 255, 255, 0.03)',
+                              }}
+                            >
+                              {desc}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Technical Raw Payload Viewer (Admin only) */}
+                {drawerPlace.raw_payload && Object.keys(drawerPlace.raw_payload).length > 0 && (
+                  <details style={{ background: 'rgba(0, 0, 0, 0.2)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', fontSize: '0.8rem' }}>
+                    <summary style={{ cursor: 'pointer', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      ⚙️ Technical Source Payload (Raw JSON)
+                    </summary>
+                    <pre
+                      style={{
+                        marginTop: '10px',
+                        padding: '10px',
+                        background: '#090d16',
+                        borderRadius: '6px',
+                        fontSize: '0.74rem',
+                        fontFamily: 'monospace',
+                        color: '#94a3b8',
+                        maxHeight: '180px',
+                        overflowY: 'auto',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {JSON.stringify(drawerPlace.raw_payload, null, 2)}
+                    </pre>
+                  </details>
+                )}
 
                 {/* Assignment & Notes */}
                 <div style={{ background: 'rgba(56, 189, 248, 0.05)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(56, 189, 248, 0.2)' }}>

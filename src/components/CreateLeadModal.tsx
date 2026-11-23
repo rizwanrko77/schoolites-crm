@@ -316,7 +316,6 @@ export default function CreateLeadModal({
         expected_start_date: '',
         additional_details: [
           `Prospect converted from Places DB (Place ID: ${initialPlace.place_id}).`,
-          initialPlace.street_address ? `Address: ${initialPlace.street_address}` : '',
           initialPlace.website ? `Website: ${initialPlace.website}` : '',
           initialPlace.rating ? `Google Rating: ${initialPlace.rating}★ (${initialPlace.rating_count || 0} reviews)` : '',
           initialPlace.notes ? `Previous Outreach Notes: ${initialPlace.notes}` : '',

@@ -111,7 +111,11 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
       const savedStatuses = sessionStorage.getItem('partner_leads_statuses');
       if (savedStatuses) {
         const parsed = JSON.parse(savedStatuses);
-        if (Array.isArray(parsed) && parsed.length > 0) setSelectedStatuses(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSelectedStatuses(parsed);
+        } else {
+          setSelectedStatuses(ALL_STATUS_IDS);
+        }
       }
 
       const savedSort = sessionStorage.getItem('partner_leads_sort');
@@ -188,15 +192,12 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
 
   const fetchMyLeads = async () => {
     try {
-      if (selectedStatuses.length === 0) {
-        setMyLeads([]);
-        return;
-      }
+      const effectiveStatuses = selectedStatuses.length > 0 ? selectedStatuses : ALL_STATUS_IDS;
       const params = new URLSearchParams();
       params.append('view', 'created_by_me');
       if (leadSearch.trim()) params.append('search', leadSearch.trim());
-      if (selectedStatuses.length < ALL_STATUS_IDS.length) {
-        params.append('statuses', selectedStatuses.join(','));
+      if (effectiveStatuses.length < ALL_STATUS_IDS.length) {
+        params.append('statuses', effectiveStatuses.join(','));
       }
       params.append('sort_by', sortBy);
 
@@ -211,8 +212,9 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
   };
 
   usePipelineAutoSync(() => {
-    fetchMyLeads();
-    if (activeTab === 'enquiries') {
+    if (activeTab === 'leads') {
+      fetchMyLeads();
+    } else if (activeTab === 'enquiries') {
       fetchEnquiries();
       if (roleBadgeClass === 'pre_sales') fetchPromoterEnquiries();
     }
@@ -2627,15 +2629,25 @@ export default function PartnerWorkspace({ roleTitle, roleBadgeClass, roleColor 
         )}
 
         {/* TAB 5: PLACES DATABASE & OUTREACH PIPELINE */}
-        {activeTab === 'database' && user?.has_database_access && (
-          <ActorDatabaseWorkspace
-            user={user}
-            onConvertToLead={(place) => {
-              setPlaceToConvert(place);
-              setEnquiryToConvert(null);
-              setIsLeadModalOpen(true);
-            }}
-          />
+        {activeTab === 'database' && (
+          user?.has_database_access ? (
+            <ActorDatabaseWorkspace
+              user={user}
+              onConvertToLead={(place) => {
+                setPlaceToConvert(place);
+                setEnquiryToConvert(null);
+                setIsLeadModalOpen(true);
+              }}
+            />
+          ) : (
+            <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', maxWidth: '520px', margin: '40px auto' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🔒</div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '8px' }}>Places Database Access Required</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                Your account does not currently have Places Database access enabled. Please contact your system administrator to assign outreach database access to your profile.
+              </p>
+            </div>
+          )
         )}
       </div>
     </ActorShell>

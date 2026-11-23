@@ -17,38 +17,51 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const tab = searchParams.get('tab') || 'new'; // 'new' or 'assigned'
+    const tab = searchParams.get('tab') || 'assigned'; // 'all', 'new', or 'assigned'
     const status = searchParams.get('status') || 'all';
     const city = searchParams.get('city') || 'all';
     const search = searchParams.get('search')?.trim().toLowerCase() || '';
+    const limitParam = parseInt(searchParams.get('limit') || '250', 10);
+    const limit = Math.min(Math.max(limitParam, 20), 500);
 
-    // Calculate queue metrics for the actor
-    const metricsRes = await sql`
-      SELECT
-        COUNT(*) FILTER (WHERE status = 'new')::int as unworked_count,
-        COUNT(*) FILTER (WHERE status NOT IN ('fresh', 'unassigned', 'new', 'converted_to_lead'))::int as active_outreach_count,
-        COUNT(*) FILTER (WHERE status = 'converted_to_lead')::int as converted_count,
-        COUNT(*)::int as total_assigned
-      FROM db_businesses
-      WHERE assigned_to_user_id = ${currentUser.id};
-    `;
-
-    // Check if user has an active pending batch request
-    const pendingReqRes = await sql`
-      SELECT id, remaining_count, requested_count, preferred_city, status, created_at
-      FROM db_pipeline_requests
-      WHERE user_id = ${currentUser.id} AND status = 'pending'
-      ORDER BY created_at DESC
-      LIMIT 1;
-    `;
+    // Calculate queue metrics for the actor and pending batch request concurrently
+    const [metricsRes, pendingReqRes, citiesRes] = await Promise.all([
+      sql`
+        SELECT
+          COUNT(*) FILTER (WHERE status IN ('new', 'fresh', 'unassigned', 'assigned'))::int as unworked_count,
+          COUNT(*) FILTER (WHERE status NOT IN ('fresh', 'unassigned', 'new', 'assigned', 'converted_to_lead'))::int as active_outreach_count,
+          COUNT(*) FILTER (WHERE status = 'converted_to_lead')::int as converted_count,
+          COUNT(*)::int as total_assigned
+        FROM db_businesses
+        WHERE assigned_to_user_id = ${currentUser.id};
+      `,
+      sql`
+        SELECT id, remaining_count, requested_count, preferred_city, status, created_at
+        FROM db_pipeline_requests
+        WHERE user_id = ${currentUser.id} AND status = 'pending'
+        ORDER BY created_at DESC
+        LIMIT 1;
+      `,
+      sql`
+        SELECT DISTINCT city
+        FROM db_businesses
+        WHERE assigned_to_user_id = ${currentUser.id} AND city IS NOT NULL AND TRIM(city) != ''
+        ORDER BY city ASC;
+      `,
+    ]);
 
     const params: SqlValue[] = [];
     const conditions: string[] = [`b.assigned_to_user_id = ${pushParam(params, currentUser.id)}::uuid`];
 
     if (tab === 'new') {
-      conditions.push(`b.status = 'new'`);
+      conditions.push(`b.status IN ('new', 'fresh', 'unassigned', 'assigned')`);
+    } else if (tab === 'assigned') {
+      conditions.push(`b.status NOT IN ('new', 'fresh', 'unassigned', 'assigned')`);
+      if (status !== 'all') {
+        conditions.push(`b.status = ${pushParam(params, status)}`);
+      }
     } else {
-      conditions.push(`b.status != 'new' AND b.status != 'fresh'`);
+      // tab === 'all'
       if (status !== 'all') {
         conditions.push(`b.status = ${pushParam(params, status)}`);
       }
@@ -114,16 +127,8 @@ export async function GET(req: NextRequest) {
       ORDER BY 
         CASE WHEN b.callback_at IS NOT NULL AND b.callback_at >= NOW() THEN 0 ELSE 1 END,
         b.updated_at DESC
-      LIMIT 100
+      LIMIT ${limit}
     `, params);
-
-    // Available cities for actor's assigned data
-    const citiesRes = await sql`
-      SELECT DISTINCT city 
-      FROM db_businesses 
-      WHERE assigned_to_user_id = ${currentUser.id} AND city IS NOT NULL AND TRIM(city) != ''
-      ORDER BY city ASC;
-    `;
 
     return NextResponse.json({
       records,

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     let leads;
 
     if (user.role === 'pre_sales' || user.role === 'referral' || view === 'created_by_me') {
-      // Scoped to leads created by the current user
+      // Scoped to leads created or promoted by the current user
       leads = await sql`
         SELECT l.id, l.lead_code, l.owner_id, l.promoter_id, l.manager_id, l.source_enquiry_id,
                l.institute_type, l.institute_name, l.country, l.city, l.student_strength,
@@ -34,11 +34,11 @@ export async function GET(req: NextRequest) {
                u_prom.name as promoter_name, u_prom.user_code as promoter_code,
                lc.contract_amount, lc.status as contract_status
         FROM leads l
-        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_owner ON l.owner_id = u_owner.id
         LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
         LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
         LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
-        WHERE l.owner_id = ${user.id}
+        WHERE (l.owner_id = ${user.id} OR l.promoter_id = ${user.id})
         ORDER BY l.created_at DESC
       `;
     } else if (user.role === 'promoter') {
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
                u_prom.name as promoter_name, u_prom.user_code as promoter_code,
                lc.contract_amount, lc.status as contract_status
         FROM leads l
-        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_owner ON l.owner_id = u_owner.id
         LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
         LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
         LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
                u_prom.name as promoter_name, u_prom.user_code as promoter_code,
                lc.contract_amount, lc.status as contract_status
         FROM leads l
-        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_owner ON l.owner_id = u_owner.id
         LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
         LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
         LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
                u_prom.name as promoter_name, u_prom.user_code as promoter_code,
                lc.contract_amount, lc.status as contract_status
         FROM leads l
-        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_owner ON l.owner_id = u_owner.id
         LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
         LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
         LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
                u_prom.name as promoter_name, u_prom.user_code as promoter_code,
                lc.contract_amount, lc.status as contract_status
         FROM leads l
-        JOIN users u_owner ON l.owner_id = u_owner.id
+        LEFT JOIN users u_owner ON l.owner_id = u_owner.id
         LEFT JOIN users u_mgr ON l.manager_id = u_mgr.id
         LEFT JOIN users u_prom ON l.promoter_id = u_prom.id
         LEFT JOIN lead_contracts lc ON l.id = lc.lead_id
