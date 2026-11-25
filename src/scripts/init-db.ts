@@ -80,7 +80,7 @@ async function main() {
       { key: 'institute_name', label: 'Institute Name', category: 'institute', type: 'text', options: [], visible: true, required: true, order: 2 },
       { key: 'country', label: 'Country', category: 'institute', type: 'text', options: [], visible: true, required: true, order: 3 },
       { key: 'city', label: 'City', category: 'institute', type: 'text', options: [], visible: true, required: true, order: 4 },
-      { key: 'student_strength', label: 'Student Strength', category: 'institute', type: 'select', options: ['Below 500', '500 - 1000', '1000 - 2000', '2000 - 3000', '3000 - 4000', '4000+'], visible: true, required: true, order: 5 },
+      { key: 'student_strength', label: 'Student Strength', category: 'institute', type: 'select', options: ['Unsure', 'Below 200', 'Below 500', '500 - 1000', '1000 - 2000', '2000 - 3000', '3000 - 4000', '4000+'], visible: true, required: true, order: 5 },
       { key: 'current_erp', label: 'Current ERP System', category: 'institute', type: 'select', options: ['yes', 'no', 'unsure'], visible: true, required: true, order: 6 },
       
       { key: 'spoc_name', label: 'SPOC Name', category: 'spoc', type: 'text', options: [], visible: true, required: true, order: 7 },

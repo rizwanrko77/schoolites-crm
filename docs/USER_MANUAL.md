@@ -119,6 +119,7 @@ Pre-Sales representatives drive outbound prospect qualification, work cold data 
     * `Contact Later`: Schedule a specific callback date and time.
     * `Following Up`: Ongoing dialogue.
     * `Not Interested`: Institution rejected outreach.
+    * `Not Relevant`: Non-school, coaching center, duplicate, or irrelevant business.
   * Any status update automatically moves the prospect into your **Assigned Database** pipeline tab, keeping your "New Data" queue focused on uncalled schools.
   * **Requesting New Batches**: When your remaining uncalled records reach **10 or fewer**, a prominent alert activates: **⚡ Request More Data**. Click the button, specify your preferred city and requested batch size, and submit.
 * **Tab 2: "Assigned Database" (Outreach Pipeline)**:

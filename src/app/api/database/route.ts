@@ -167,11 +167,13 @@ export async function PATCH(req: NextRequest) {
 
     const validStatuses = [
       'new',
+      'fresh',
       'rnr',
       'switched_off',
       'interested',
       'contact_later',
       'not_interested',
+      'not_relevant',
       'following_up',
       'converted_to_lead',
     ];

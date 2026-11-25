@@ -378,7 +378,7 @@ export async function POST(req: NextRequest) {
         status, deal_value, is_duplicate, duplicate_of_lead_id
       ) VALUES (
         ${leadCode}, ${user.id}, ${resolvedPromoterId}, ${initialManagerId}, ${source_enquiry_id || null},
-        ${institute_type || 'School'}, ${institute_name.trim()}, ${country || 'India'}, ${city || 'Unknown'}, ${student_strength || 'Unspecified'},
+        ${institute_type || 'School'}, ${institute_name.trim()}, ${country || 'India'}, ${city || 'Unknown'}, ${student_strength || 'Unsure'},
         ${finalCurrentErp}, ${current_erp_name || null},
         ${spoc_name.trim()}, ${spoc_role ? spoc_role.trim() : 'SPOC'}, ${cleanSpocPhone}, ${normalizedSpocEmail},
         ${Boolean(dm_same_as_spoc)}, ${finalDmName.trim()}, ${finalDmRole ? finalDmRole.trim() : 'Decision Maker'}, ${finalDmPhone}, ${finalDmEmail},

@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { COUNTRIES } from '@/lib/countries';
 
 const STUDENT_STRENGTH_OPTIONS = [
+  'Unsure',
+  'Below 200',
   'Below 500',
   '500 - 1000',
   '1000 - 2000',
@@ -22,11 +24,13 @@ export const EXPECTED_START_OPTIONS = [
 ];
 
 function mapStudentStrength(val: string | number | null | undefined): string {
-  if (!val) return '';
+  if (!val) return 'Unsure';
   const str = String(val).trim();
   if (STUDENT_STRENGTH_OPTIONS.includes(str)) return str;
+  if (str.toLowerCase() === 'unsure') return 'Unsure';
   const num = parseInt(str.replace(/[^0-9]/g, ''), 10);
-  if (isNaN(num)) return '';
+  if (isNaN(num)) return 'Unsure';
+  if (num < 200) return 'Below 200';
   if (num < 500) return 'Below 500';
   if (num <= 1000) return '500 - 1000';
   if (num <= 2000) return '1000 - 2000';
@@ -51,7 +55,7 @@ const INITIAL_BLANK_LEAD_FORM = {
   institute_name: '',
   country: 'India',
   city: '',
-  student_strength: '',
+  student_strength: 'Unsure',
   current_erp: '',
   current_erp_name: '',
   spoc_name: '',
@@ -204,7 +208,7 @@ export default function CreateLeadModal({
         institute_name: leadToEdit.institute_name || '',
         country: leadToEdit.country || 'India',
         city: leadToEdit.city || '',
-        student_strength: mapStudentStrength(leadToEdit.student_strength) || leadToEdit.student_strength || '',
+        student_strength: mapStudentStrength(leadToEdit.student_strength) || leadToEdit.student_strength || 'Unsure',
         current_erp: leadToEdit.current_erp || 'unsure',
         current_erp_name: leadToEdit.current_erp_name || '',
         spoc_name: leadToEdit.spoc_name || '',
@@ -258,7 +262,7 @@ export default function CreateLeadModal({
         institute_name: initialEnquiry.institute_name || '',
         country: initialEnquiry.country || 'India',
         city: initialEnquiry.city || '',
-        student_strength: initialEnquiry.student_count ? mapStudentStrength(initialEnquiry.student_count) : '',
+        student_strength: initialEnquiry.student_count ? mapStudentStrength(initialEnquiry.student_count) : 'Unsure',
         current_erp: '',
         current_erp_name: '',
         spoc_name: initialEnquiry.spoc_name || '',
@@ -293,7 +297,7 @@ export default function CreateLeadModal({
         institute_name: initialPlace.name || '',
         country: initialPlace.country || 'India',
         city: initialPlace.city || '',
-        student_strength: '',
+        student_strength: 'Unsure',
         current_erp: '',
         current_erp_name: '',
         spoc_name: initialPlace.name ? `${initialPlace.name} Admin` : '',
@@ -745,13 +749,12 @@ export default function CreateLeadModal({
                     Student Strength {isRequired('student_strength', true) ? '*' : ''}
                   </label>
                   <select
-                    value={formData.student_strength}
+                    value={formData.student_strength || 'Unsure'}
                     onChange={(e) => setFormData({ ...formData, student_strength: e.target.value })}
                     className="input-field"
                     style={{ background: '#0f172a' }}
                     required={isRequired('student_strength', true)}
                   >
-                    <option value="">-- Select Student Strength --</option>
                     {STUDENT_STRENGTH_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
                         {opt}

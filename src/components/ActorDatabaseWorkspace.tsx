@@ -272,6 +272,7 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
       interested: { label: 'Interested', color: '#34d399', bg: 'rgba(52, 211, 153, 0.18)', icon: '🔥' },
       contact_later: { label: 'Callback Scheduled', color: '#818cf8', bg: 'rgba(129, 140, 248, 0.15)', icon: '📅' },
       not_interested: { label: 'Not Interested', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.12)', icon: '✕' },
+      not_relevant: { label: 'Not Relevant', color: '#64748b', bg: 'rgba(100, 116, 139, 0.15)', icon: '🚫' },
       following_up: { label: 'Active Follow-up', color: '#c084fc', bg: 'rgba(192, 132, 252, 0.15)', icon: '🔄' },
       converted_to_lead: { label: 'Converted to Lead', color: '#10b981', bg: 'rgba(16, 185, 129, 0.25)', icon: '🎯' },
     };
@@ -569,6 +570,7 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                 <option value="switched_off">📵 Switched Off</option>
                 <option value="converted_to_lead">🎯 Converted to Lead</option>
                 <option value="not_interested">✕ Not Interested</option>
+                <option value="not_relevant">🚫 Not Relevant</option>
               </select>
             </div>
           )}
@@ -842,6 +844,21 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                     }}
                   >
                     ✕ Not Interested
+                  </button>
+
+                  <button
+                    disabled={updatingId === place.id || place.status === 'not_relevant'}
+                    onClick={() => handleUpdateStatus(place, 'not_relevant')}
+                    className="btn-secondary"
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '0.78rem',
+                      opacity: place.status === 'not_relevant' ? 1 : 0.7,
+                      borderColor: place.status === 'not_relevant' ? '#64748b' : undefined,
+                      color: place.status === 'not_relevant' ? '#94a3b8' : undefined,
+                    }}
+                  >
+                    🚫 Not Relevant
                   </button>
                 </div>
               </div>

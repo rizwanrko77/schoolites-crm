@@ -238,3 +238,31 @@ Run standalone integration test scripts using `tsx`:
 npx tsx src/scripts/test-connection.ts
 npx tsx src/scripts/test-database-places.ts
 ```
+
+---
+
+## 8. Outreach & Lead Field Specifications
+
+### 8.1 Places Database Outreach Statuses
+The allowed statuses in `db_businesses.status` and `PATCH /api/database` are:
+* `fresh` / `new`: Uncontacted staged prospect.
+* `rnr`: Ringing No Response.
+* `switched_off`: Contact number unreachable.
+* `interested`: Lead expressed interest in exploring ERP.
+* `contact_later`: Callback scheduled with a specific timestamp.
+* `following_up`: Active multi-touch follow-up in progress.
+* `not_interested`: Target institution formally declined.
+* `not_relevant`: Misclassified listing, coaching/tuition shop, or non-educational entity.
+* `converted_to_lead`: Transitioned into active CRM pipeline lead.
+
+### 8.2 Lead Form Student Strength Options
+Configured via `form_field_configs` (lead form) and `CreateLeadModal.tsx`:
+* `Unsure` *(Default selection)*
+* `Below 200`
+* `Below 500`
+* `500 - 1000`
+* `1000 - 2000`
+* `2000 - 3000`
+* `3000 - 4000`
+* `4000+`
+
