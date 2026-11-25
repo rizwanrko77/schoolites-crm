@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status') || 'all';
     const city = searchParams.get('city') || 'all';
     const assignedTo = searchParams.get('assigned_to') || 'all';
+    const tab = searchParams.get('tab') || 'all';
     const parsedPage = parseInt(searchParams.get('page') || '1', 10);
     const parsedLimit = parseInt(searchParams.get('limit') || '50', 10);
     const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
@@ -23,6 +24,10 @@ export async function GET(req: NextRequest) {
 
     const params: SqlValue[] = [];
     const conditions: string[] = ['1=1'];
+
+    if (tab === 'assigned') {
+      conditions.push('b.assigned_to_user_id IS NOT NULL');
+    }
 
     if (status !== 'all') {
       if (status === 'fresh') {

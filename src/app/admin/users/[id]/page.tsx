@@ -336,6 +336,8 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
         return { label: 'Switched Off', bg: 'rgba(244, 63, 94, 0.15)', color: '#fb7185', border: 'rgba(244, 63, 94, 0.35)' };
       case 'not_interested':
         return { label: 'Not Interested', bg: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: 'rgba(239, 68, 68, 0.35)' };
+      case 'not_relevant':
+        return { label: 'Not Relevant', bg: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.35)' };
       case 'wrong_number':
         return { label: 'Wrong Number', bg: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.35)' };
       case 'note_added':
@@ -381,6 +383,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
     let rnrCount = 0;
     let switchedOffCount = 0;
     let notInterestedCount = 0;
+    let notRelevantCount = 0;
     let freshCount = 0;
 
     const todayStart = new Date();
@@ -388,13 +391,14 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
     const todayStartTime = todayStart.getTime();
 
     assignedBusinesses.forEach((b) => {
+      const st = (b.status || '').toLowerCase();
+      const isUnworked = st === 'assigned' || st === 'fresh' || st === 'new' || st === 'unassigned' || !b.last_contacted_at;
       const contactTime = b.last_contacted_at ? new Date(b.last_contacted_at).getTime() : 0;
       const updatedTime = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-      if (contactTime >= todayStartTime || updatedTime >= todayStartTime) {
+      if (!isUnworked && (contactTime >= todayStartTime || updatedTime >= todayStartTime)) {
         workedToday++;
       }
 
-      const st = (b.status || '').toLowerCase();
       if (st === 'converted_to_lead' || Boolean(b.converted_lead_id)) {
         convertedCount++;
       } else if (st === 'callback' || st === 'contact_later' || Boolean(b.callback_at)) {
@@ -409,7 +413,9 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
         switchedOffCount++;
       } else if (st === 'not_interested') {
         notInterestedCount++;
-      } else if (st === 'assigned' || st === 'fresh' || st === 'new' || st === 'unassigned' || !b.last_contacted_at) {
+      } else if (st === 'not_relevant') {
+        notRelevantCount++;
+      } else if (isUnworked) {
         freshCount++;
       }
     });
@@ -424,6 +430,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
       rnrCount,
       switchedOffCount,
       notInterestedCount,
+      notRelevantCount,
       freshCount,
     };
   }, [assignedBusinesses]);
@@ -454,6 +461,8 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
         } else if (dbStatusFilter === 'switched_off') {
           if (st !== 'switched_off') return false;
         } else if (dbStatusFilter === 'worked_today') {
+          const isUnworked = st === 'assigned' || st === 'fresh' || st === 'new' || st === 'unassigned' || !item.last_contacted_at;
+          if (isUnworked) return false;
           const contactTime = item.last_contacted_at ? new Date(item.last_contacted_at).getTime() : 0;
           const updatedTime = item.updated_at ? new Date(item.updated_at).getTime() : 0;
           const todayStart = new Date();
@@ -1314,6 +1323,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                       { id: 'rnr', label: `RNR (${dbAssignedStats.rnrCount})` },
                       { id: 'switched_off', label: `Switched Off (${dbAssignedStats.switchedOffCount})` },
                       { id: 'not_interested', label: `Not Interested (${dbAssignedStats.notInterestedCount})` },
+                      { id: 'not_relevant', label: `Not Relevant (${dbAssignedStats.notRelevantCount})` },
                       { id: 'converted_to_lead', label: `Converted (${dbAssignedStats.convertedCount})` },
                     ].map((st) => (
                       <button
@@ -1520,14 +1530,14 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                               </td>
 
                               <td style={{ padding: '14px 18px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                                {item.last_contacted_at ? (
+                                {item.status !== 'fresh' && item.status !== 'new' && item.status !== 'assigned' && item.status !== 'unassigned' && item.last_contacted_at ? (
                                   <>
                                     <div>{new Date(item.last_contacted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
                                     <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                                       {new Date(item.last_contacted_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                                     </div>
                                   </>
-                                ) : item.updated_at ? (
+                                ) : item.status !== 'fresh' && item.status !== 'new' && item.status !== 'assigned' && item.status !== 'unassigned' && item.updated_at ? (
                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>
                                     Updated {new Date(item.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                                   </span>

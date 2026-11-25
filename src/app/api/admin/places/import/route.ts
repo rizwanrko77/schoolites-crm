@@ -117,8 +117,12 @@ export async function POST(req: NextRequest) {
     let skippedNoPhoneCount = 0;
     let skippedInvalidCount = 0;
 
-    for (const r of rawRecords) {
-      // Find matching keys with standard aliases
+    const CHUNK_SIZE = 15;
+    for (let i = 0; i < rawRecords.length; i += CHUNK_SIZE) {
+      const chunk = rawRecords.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async (r) => {
+          // Find matching keys with standard aliases
       const placeId = (
         r.place_id ||
         r.id ||
@@ -160,12 +164,12 @@ export async function POST(req: NextRequest) {
       // Mandatory validation: Must have placeId, name, and at least one phone
       if (!placeId || !name) {
         skippedInvalidCount++;
-        continue;
+        return;
       }
 
       if (!primaryPhone && !alternativePhone) {
         skippedNoPhoneCount++;
-        continue;
+        return;
       }
 
       const website = (r.website || r.website_uri || r.websiteuri || '').trim() || null;
@@ -216,7 +220,7 @@ export async function POST(req: NextRequest) {
       const rawCheckedAt = (r.checked_at || r.last_contacted_at || '').trim();
 
       let initialStatus = 'fresh';
-      const validStatuses = ['new', 'rnr', 'switched_off', 'interested', 'contact_later', 'not_interested', 'following_up', 'converted_to_lead'];
+      const validStatuses = ['new', 'rnr', 'switched_off', 'interested', 'contact_later', 'not_interested', 'not_relevant', 'following_up', 'converted_to_lead'];
       if (validStatuses.includes(rawStatus)) {
         initialStatus = rawStatus;
       } else if (rawStatus === 'callback' || rawStatus === 'call_back') {
@@ -224,7 +228,8 @@ export async function POST(req: NextRequest) {
       }
 
       let checkedAtTimestamp: string | null = null;
-      if (rawCheckedAt) {
+      // Only set last_contacted_at if there is an actual outreach call disposition (not fresh/new)
+      if (rawCheckedAt && initialStatus !== 'fresh' && initialStatus !== 'new') {
         try {
           const parsed = new Date(rawCheckedAt);
           if (!isNaN(parsed.getTime())) {
@@ -359,7 +364,8 @@ export async function POST(req: NextRequest) {
 
         updatedCount++;
       }
-    }
+    }));
+  }
 
     return NextResponse.json({
       success: true,

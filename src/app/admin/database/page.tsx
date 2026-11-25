@@ -186,11 +186,9 @@ export default function AdminDatabasePage() {
       if (activeTab === 'fresh') {
         params.append('status', 'fresh');
       } else if (activeTab === 'assigned') {
+        params.append('tab', 'assigned');
         if (selectedStatus !== 'all') {
           params.append('status', selectedStatus);
-        } else {
-          // All active statuses
-          params.append('assigned_to', selectedUser !== 'all' ? selectedUser : 'all');
         }
       } else {
         if (selectedStatus !== 'all') params.append('status', selectedStatus);
@@ -203,7 +201,12 @@ export default function AdminDatabasePage() {
       setStats(data.stats || stats);
       setCities(data.cities || []);
       setDbUsers(data.dbUsers || []);
-      if (data.pagination) setPagination(data.pagination);
+      if (data.pagination) {
+        setPagination(data.pagination);
+        if (data.pagination.totalPages > 0 && page > data.pagination.totalPages) {
+          setPage(1);
+        }
+      }
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -337,8 +340,8 @@ export default function AdminDatabasePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ csv: csvText }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to import CSV');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Failed to import CSV (${res.status} ${res.statusText})`);
 
       setImportSummary(data.summary);
       setToastMsg(data.message);
@@ -436,7 +439,9 @@ export default function AdminDatabasePage() {
   const handleStartVisualAllocation = (reqItem: DataRequestItem) => {
     setAllocatingForRequest(reqItem);
     setActiveTab('fresh');
-    setSelectedCity(reqItem.preferred_city || 'all');
+    const reqCity = (reqItem.preferred_city || '').trim();
+    const matchedCity = cities.find((c) => c.toLowerCase() === reqCity.toLowerCase());
+    setSelectedCity(matchedCity || 'all');
     setSelectedIds([]);
     setSearch('');
     setPage(1);
@@ -1015,7 +1020,10 @@ export default function AdminDatabasePage() {
                 type="text"
                 placeholder="Search school name, phone, city, address, or Place ID..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 className="input-field"
                 style={{ width: '100%', padding: '8px 14px', fontSize: '0.85rem' }}
               />
@@ -1026,7 +1034,10 @@ export default function AdminDatabasePage() {
                 <label style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>City:</label>
                 <select
                   value={selectedCity}
-                  onChange={(e) => setSelectedCity(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedCity(e.target.value);
+                    setPage(1);
+                  }}
                   className="input-field"
                   style={{ padding: '7px 10px', fontSize: '0.82rem', background: '#0f172a', color: '#ffffff' }}
                 >
@@ -1042,7 +1053,10 @@ export default function AdminDatabasePage() {
                   <label style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Status:</label>
                   <select
                     value={selectedStatus}
-                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedStatus(e.target.value);
+                      setPage(1);
+                    }}
                     className="input-field"
                     style={{ padding: '7px 10px', fontSize: '0.82rem', background: '#0f172a', color: '#ffffff' }}
                   >
@@ -1065,7 +1079,10 @@ export default function AdminDatabasePage() {
                   <label style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Assigned To:</label>
                   <select
                     value={selectedUser}
-                    onChange={(e) => setSelectedUser(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedUser(e.target.value);
+                      setPage(1);
+                    }}
                     className="input-field"
                     style={{ padding: '7px 10px', fontSize: '0.82rem', background: '#0f172a', color: '#ffffff' }}
                   >
@@ -1254,7 +1271,7 @@ export default function AdminDatabasePage() {
                               <div style={{ color: '#818cf8', fontWeight: 600, fontSize: '0.8rem' }}>
                                 📅 {new Date(p.callback_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                               </div>
-                            ) : p.last_contacted_at ? (
+                            ) : (p.status !== 'fresh' && p.status !== 'unassigned' && p.status !== 'new' && p.last_contacted_at) ? (
                               <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                                 Last call: {new Date(p.last_contacted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                               </div>
