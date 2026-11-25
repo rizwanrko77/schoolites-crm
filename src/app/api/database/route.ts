@@ -31,7 +31,15 @@ export async function GET(req: NextRequest) {
           COUNT(*) FILTER (WHERE status IN ('new', 'fresh', 'unassigned', 'assigned'))::int as unworked_count,
           COUNT(*) FILTER (WHERE status NOT IN ('fresh', 'unassigned', 'new', 'assigned', 'converted_to_lead'))::int as active_outreach_count,
           COUNT(*) FILTER (WHERE status = 'converted_to_lead')::int as converted_count,
-          COUNT(*)::int as total_assigned
+          COUNT(*)::int as total_assigned,
+          COUNT(*) FILTER (WHERE status IN ('new', 'fresh', 'unassigned', 'assigned'))::int as new_count,
+          COUNT(*) FILTER (WHERE status = 'interested')::int as interested_count,
+          COUNT(*) FILTER (WHERE status IN ('contact_later', 'callback'))::int as contact_later_count,
+          COUNT(*) FILTER (WHERE status = 'following_up')::int as following_up_count,
+          COUNT(*) FILTER (WHERE status = 'rnr')::int as rnr_count,
+          COUNT(*) FILTER (WHERE status = 'switched_off')::int as switched_off_count,
+          COUNT(*) FILTER (WHERE status = 'not_interested')::int as not_interested_count,
+          COUNT(*) FILTER (WHERE status = 'not_relevant')::int as not_relevant_count
         FROM db_businesses
         WHERE assigned_to_user_id = ${currentUser.id};
       `,
@@ -58,12 +66,22 @@ export async function GET(req: NextRequest) {
     } else if (tab === 'assigned') {
       conditions.push(`b.status NOT IN ('new', 'fresh', 'unassigned', 'assigned')`);
       if (status !== 'all') {
-        conditions.push(`b.status = ${pushParam(params, status)}`);
+        if (status === 'contact_later') {
+          conditions.push(`b.status IN ('contact_later', 'callback')`);
+        } else {
+          conditions.push(`b.status = ${pushParam(params, status)}`);
+        }
       }
     } else {
       // tab === 'all'
       if (status !== 'all') {
-        conditions.push(`b.status = ${pushParam(params, status)}`);
+        if (status === 'new') {
+          conditions.push(`b.status IN ('new', 'fresh', 'unassigned', 'assigned')`);
+        } else if (status === 'contact_later') {
+          conditions.push(`b.status IN ('contact_later', 'callback')`);
+        } else {
+          conditions.push(`b.status = ${pushParam(params, status)}`);
+        }
       }
     }
 
@@ -130,14 +148,28 @@ export async function GET(req: NextRequest) {
       LIMIT ${limit}
     `, params);
 
+    const m = (metricsRes && metricsRes[0]) || {};
+    const metricsData = {
+      unworked_count: Number(m.unworked_count) || 0,
+      active_outreach_count: Number(m.active_outreach_count) || 0,
+      converted_count: Number(m.converted_count) || 0,
+      total_assigned: Number(m.total_assigned) || 0,
+      status_counts: {
+        new: Number(m.new_count) || 0,
+        interested: Number(m.interested_count) || 0,
+        contact_later: Number(m.contact_later_count) || 0,
+        following_up: Number(m.following_up_count) || 0,
+        rnr: Number(m.rnr_count) || 0,
+        switched_off: Number(m.switched_off_count) || 0,
+        not_interested: Number(m.not_interested_count) || 0,
+        not_relevant: Number(m.not_relevant_count) || 0,
+        converted_to_lead: Number(m.converted_count) || 0,
+      },
+    };
+
     return NextResponse.json({
       records,
-      metrics: metricsRes[0] || {
-        unworked_count: 0,
-        active_outreach_count: 0,
-        converted_count: 0,
-        total_assigned: 0,
-      },
+      metrics: metricsData,
       pendingRequest: pendingReqRes[0] || null,
       cities: citiesRes.map((r: any) => r.city),
     });

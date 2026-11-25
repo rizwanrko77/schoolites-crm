@@ -68,11 +68,28 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
   const [subTab, setSubTabState] = useState<SubTabType>('all');
   const [records, setRecords] = useState<PlaceRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [metrics, setMetrics] = useState({
+  const [metrics, setMetrics] = useState<{
+    unworked_count: number;
+    active_outreach_count: number;
+    converted_count: number;
+    total_assigned: number;
+    status_counts?: {
+      new?: number;
+      interested?: number;
+      contact_later?: number;
+      following_up?: number;
+      rnr?: number;
+      switched_off?: number;
+      not_interested?: number;
+      not_relevant?: number;
+      converted_to_lead?: number;
+    };
+  }>({
     unworked_count: 0,
     active_outreach_count: 0,
     converted_count: 0,
     total_assigned: 0,
+    status_counts: {},
   });
   const [pendingRequest, setPendingRequest] = useState<any | null>(null);
   const [cities, setCities] = useState<string[]>([]);
@@ -115,6 +132,11 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
   const [callbackDates, setCallbackDates] = useState<Record<string, string>>({});
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+
+  const toggleNotes = (id: string) => {
+    setExpandedNotes((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Request Batch Modal
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -199,6 +221,10 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update outreach record');
+
+      if (newStatus === 'contact_later') {
+        setExpandedNotes((prev) => ({ ...prev, [place.id]: true }));
+      }
 
       setToastMsg(`Status updated to ${newStatus.replace(/_/g, ' ')}!`);
       setTimeout(() => setToastMsg(''), 3000);
@@ -562,15 +588,16 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                 className="input-field"
                 style={{ padding: '7px 10px', fontSize: '0.82rem', background: '#0f172a', color: '#ffffff' }}
               >
-                <option value="all">All Outreach Stages</option>
-                <option value="interested">🔥 Interested</option>
-                <option value="contact_later">📅 Callback Scheduled</option>
-                <option value="following_up">🔄 Following Up</option>
-                <option value="rnr">📞 Ringing No Response (RNR)</option>
-                <option value="switched_off">📵 Switched Off</option>
-                <option value="converted_to_lead">🎯 Converted to Lead</option>
-                <option value="not_interested">✕ Not Interested</option>
-                <option value="not_relevant">🚫 Not Relevant</option>
+                <option value="all">All Outreach Stages ({metrics.total_assigned || 0})</option>
+                <option value="new">📋 New Queue ({metrics.status_counts?.new || 0})</option>
+                <option value="interested">🔥 Interested ({metrics.status_counts?.interested || 0})</option>
+                <option value="contact_later">📅 Callback Scheduled ({metrics.status_counts?.contact_later || 0})</option>
+                <option value="following_up">🔄 Following Up ({metrics.status_counts?.following_up || 0})</option>
+                <option value="rnr">📞 Ringing No Response (RNR) ({metrics.status_counts?.rnr || 0})</option>
+                <option value="switched_off">📵 Switched Off ({metrics.status_counts?.switched_off || 0})</option>
+                <option value="converted_to_lead">🎯 Converted to Lead ({metrics.status_counts?.converted_to_lead || 0})</option>
+                <option value="not_interested">✕ Not Interested ({metrics.status_counts?.not_interested || 0})</option>
+                <option value="not_relevant">🚫 Not Relevant ({metrics.status_counts?.not_relevant || 0})</option>
               </select>
             </div>
           )}
@@ -590,6 +617,43 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
           )}
         </div>
       </div>
+
+      {/* Active Filter or Search Summary Badge */}
+      {(statusFilter !== 'all' || cityFilter !== 'all' || search.trim()) && !loading && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 14px',
+            background: 'rgba(56, 189, 248, 0.08)',
+            border: '1px solid rgba(56, 189, 248, 0.2)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.82rem',
+            color: '#38bdf8',
+          }}
+        >
+          <span>
+            Showing <strong>{records.length}</strong> matching prospects
+            {statusFilter !== 'all' && (
+              <> in <strong>{statusFilter.replace(/_/g, ' ')}</strong></>
+            )}
+            {cityFilter !== 'all' && <> for <strong>{cityFilter}</strong></>}
+            {search.trim() && <> matching &quot;<strong>{search}</strong>&quot;</>}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter('all');
+              setCityFilter('all');
+              setSearch('');
+            }}
+            style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
+          >
+            ✕ Clear filters
+          </button>
+        </div>
+      )}
 
       {/* Prospects Working Queue List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -756,147 +820,184 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                 </div>
               </div>
 
-              {/* Quick Status Action Buttons */}
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '12px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: '8px' }}>
-                  Quick Outcome Logging:
-                </span>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button
-                    disabled={updatingId === place.id || place.status === 'rnr'}
-                    onClick={() => handleUpdateStatus(place, 'rnr')}
-                    className="btn-secondary"
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '0.78rem',
-                      borderColor: place.status === 'rnr' ? '#fbbf24' : undefined,
-                      color: place.status === 'rnr' ? '#fbbf24' : undefined,
-                    }}
-                  >
-                    📞 RNR (No Answer)
-                  </button>
-
-                  <button
-                    disabled={updatingId === place.id || place.status === 'switched_off'}
-                    onClick={() => handleUpdateStatus(place, 'switched_off')}
-                    className="btn-secondary"
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '0.78rem',
-                      borderColor: place.status === 'switched_off' ? '#f87171' : undefined,
-                      color: place.status === 'switched_off' ? '#f87171' : undefined,
-                    }}
-                  >
-                    📵 Switched Off
-                  </button>
-
-                  <button
-                    disabled={updatingId === place.id || place.status === 'interested'}
-                    onClick={() => handleUpdateStatus(place, 'interested')}
-                    className="btn-secondary"
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '0.78rem',
-                      borderColor: place.status === 'interested' ? '#34d399' : undefined,
-                      color: place.status === 'interested' ? '#34d399' : undefined,
-                      fontWeight: 700,
-                    }}
-                  >
-                    🔥 Interested
-                  </button>
-
-                  <button
-                    disabled={updatingId === place.id || place.status === 'following_up'}
-                    onClick={() => handleUpdateStatus(place, 'following_up')}
-                    className="btn-secondary"
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '0.78rem',
-                      borderColor: place.status === 'following_up' ? '#c084fc' : undefined,
-                      color: place.status === 'following_up' ? '#c084fc' : undefined,
-                    }}
-                  >
-                    🔄 Following Up
-                  </button>
-
-                  <button
-                    disabled={updatingId === place.id || place.status === 'contact_later'}
-                    onClick={() => handleUpdateStatus(place, 'contact_later')}
-                    className="btn-secondary"
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '0.78rem',
-                      borderColor: place.status === 'contact_later' ? '#818cf8' : undefined,
-                      color: place.status === 'contact_later' ? '#818cf8' : undefined,
-                    }}
-                  >
-                    📅 Schedule Callback
-                  </button>
-
-                  <button
-                    disabled={updatingId === place.id || place.status === 'not_interested'}
-                    onClick={() => handleUpdateStatus(place, 'not_interested')}
-                    className="btn-secondary"
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '0.78rem',
-                      opacity: place.status === 'not_interested' ? 1 : 0.7,
-                    }}
-                  >
-                    ✕ Not Interested
-                  </button>
-
-                  <button
-                    disabled={updatingId === place.id || place.status === 'not_relevant'}
-                    onClick={() => handleUpdateStatus(place, 'not_relevant')}
-                    className="btn-secondary"
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '0.78rem',
-                      opacity: place.status === 'not_relevant' ? 1 : 0.7,
-                      borderColor: place.status === 'not_relevant' ? '#64748b' : undefined,
-                      color: place.status === 'not_relevant' ? '#94a3b8' : undefined,
-                    }}
-                  >
-                    🚫 Not Relevant
-                  </button>
-                </div>
-              </div>
-
-              {/* Notes & Callback Scheduling Inputs */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: '12px', alignItems: 'flex-start' }}>
-                <div>
-                  <input
-                    type="text"
-                    placeholder="Enter call notes (e.g. Spoke with Principal, asked to call back Wednesday at 3pm)..."
-                    value={editingNotes[place.id] !== undefined ? editingNotes[place.id] : place.notes || ''}
-                    onChange={(e) => setEditingNotes({ ...editingNotes, [place.id]: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveNotes(place);
-                    }}
-                    className="input-field"
-                    style={{ width: '100%', fontSize: '0.84rem', padding: '8px 12px' }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="datetime-local"
-                    value={callbackDates[place.id] || ''}
-                    onChange={(e) => setCallbackDates({ ...callbackDates, [place.id]: e.target.value })}
-                    className="input-field"
-                    style={{ fontSize: '0.8rem', padding: '7px 8px', width: '150px' }}
-                  />
-                  <button
-                    onClick={() => handleSaveNotes(place)}
+              {/* Outreach Outcome Dropdown & Notes Action Bar */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(15, 23, 42, 0.65)',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                {/* Status Dropdown */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    Status:
+                  </label>
+                  <select
                     disabled={updatingId === place.id}
-                    className="btn-secondary"
-                    style={{ padding: '7px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                    value={
+                      ['fresh', 'unassigned', 'assigned'].includes(place.status)
+                        ? 'new'
+                        : place.status === 'callback'
+                        ? 'contact_later'
+                        : place.status
+                    }
+                    onChange={(e) => handleUpdateStatus(place, e.target.value)}
+                    className="input-field"
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      background: '#090d16',
+                      color:
+                        place.status === 'interested'
+                          ? '#34d399'
+                          : place.status === 'contact_later' || place.status === 'callback'
+                          ? '#818cf8'
+                          : place.status === 'rnr'
+                          ? '#fbbf24'
+                          : place.status === 'switched_off' || place.status === 'not_interested'
+                          ? '#f87171'
+                          : place.status === 'not_relevant'
+                          ? '#94a3b8'
+                          : '#ffffff',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      cursor: 'pointer',
+                    }}
                   >
-                    {updatingId === place.id ? 'Saving...' : 'Save Notes'}
+                    <option value="new">📋 New (Uncontacted)</option>
+                    <option value="rnr">📞 Ringing No Response (RNR)</option>
+                    <option value="switched_off">📵 Switched Off</option>
+                    <option value="interested">🔥 Interested</option>
+                    <option value="following_up">🔄 Following Up</option>
+                    <option value="contact_later">📅 Callback Scheduled</option>
+                    <option value="not_interested">✕ Not Interested</option>
+                    <option value="not_relevant">🚫 Not Relevant</option>
+                    <option value="converted_to_lead">🎯 Converted to Lead</option>
+                  </select>
+                  {updatingId === place.id && (
+                    <span style={{ fontSize: '0.74rem', color: '#38bdf8' }}>Updating...</span>
+                  )}
+                </div>
+
+                {/* Notes & Callback Schedule Indicator & Toggle Button */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {place.callback_at && (
+                    <span
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        background: 'rgba(99, 102, 241, 0.15)',
+                        color: '#a5b4fc',
+                        border: '1px solid rgba(99, 102, 241, 0.35)',
+                      }}
+                    >
+                      📅 Due: {new Date(place.callback_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {new Date(place.callback_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleNotes(place.id)}
+                    className="btn-secondary"
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '0.78rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      background: expandedNotes[place.id]
+                        ? 'rgba(56, 189, 248, 0.18)'
+                        : place.notes
+                        ? 'rgba(16, 185, 129, 0.12)'
+                        : 'rgba(255, 255, 255, 0.04)',
+                      borderColor: expandedNotes[place.id]
+                        ? '#38bdf8'
+                        : place.notes
+                        ? 'rgba(16, 185, 129, 0.4)'
+                        : undefined,
+                      color: expandedNotes[place.id]
+                        ? '#38bdf8'
+                        : place.notes
+                        ? '#34d399'
+                        : 'var(--text-secondary)',
+                      fontWeight: place.notes ? 600 : 500,
+                    }}
+                  >
+                    <span>📝</span>
+                    <span>
+                      {place.notes ? 'Notes (Saved)' : 'Notes'}
+                    </span>
+                    <span style={{ fontSize: '0.68rem', marginLeft: '2px' }}>
+                      {expandedNotes[place.id] ? '▲' : '▼'}
+                    </span>
                   </button>
                 </div>
               </div>
+
+              {/* Collapsible Notes & Callback Scheduling Section */}
+              {expandedNotes[place.id] && (
+                <div
+                  style={{
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(2, 6, 23, 0.75)',
+                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                  }}
+                >
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: '12px', alignItems: 'flex-start' }}>
+                    <div>
+                      <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                        Call Notes & Remarks:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Enter call notes (e.g. Spoke with Principal, asked to call back Wednesday at 3pm)..."
+                        value={editingNotes[place.id] !== undefined ? editingNotes[place.id] : place.notes || ''}
+                        onChange={(e) => setEditingNotes({ ...editingNotes, [place.id]: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveNotes(place);
+                        }}
+                        className="input-field"
+                        style={{ width: '100%', fontSize: '0.84rem', padding: '8px 12px' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                        Callback Schedule:
+                      </label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="datetime-local"
+                          value={callbackDates[place.id] || ''}
+                          onChange={(e) => setCallbackDates({ ...callbackDates, [place.id]: e.target.value })}
+                          className="input-field"
+                          style={{ fontSize: '0.8rem', padding: '7px 8px', width: '150px' }}
+                        />
+                        <button
+                          onClick={() => handleSaveNotes(place)}
+                          disabled={updatingId === place.id}
+                          className="btn-primary"
+                          style={{ padding: '7px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                        >
+                          {updatingId === place.id ? 'Saving...' : 'Save Notes'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}
