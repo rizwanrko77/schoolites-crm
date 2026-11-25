@@ -256,3 +256,8 @@ Affiliate Promoters are traffic generators and community advocates who promote S
 ### 8.2 Rep Profile Performance & Dialing Metrics
 * In `/admin/users/[id]`, the **Worked / Contacted Today** metric tracks unique institutions dialed or progressed today, excluding newly assigned but uncontacted leads.
 * Use the quick-filter pills (`All`, `Worked Today`, `Fresh`, `Callback`, `Interested`, `RNR`, `Switched Off`, `Not Interested`, `Not Relevant`, `Converted`) to inspect a representative's pipeline.
+
+### 8.3 Pre-Sales & Referral Partner Outreach Workspace (`/presales`, `/referral`)
+* **Outreach Status Breakdown**: Open the **Outreach Status** filter dropdown to view live lead counts across every status (e.g. *Interested (5)*, *Not Interested (14)*, *Callback Scheduled (8)*).
+* **Updating Lead Stage**: Change the school's stage using the **Status** dropdown on each card. It defaults to the school's current status and saves immediately.
+* **Adding Notes & Scheduling Callbacks**: Click the **📝 Notes** button on any card to reveal the notes text field and callback scheduler. If notes were previously entered, the button highlights with *Notes (Saved)*. Choosing *Callback Scheduled* in the status dropdown automatically opens the callback scheduler.

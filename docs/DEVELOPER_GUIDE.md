@@ -284,3 +284,8 @@ Configured via `form_field_configs` (lead form) and `CreateLeadModal.tsx`:
 * **Worked Today Counter**: On `/admin/users/[id]`, `workedToday` only increments for records with active outreach activity (`!isUnworked && (last_contacted_at >= today || updated_at >= today)`). Bulk admin assignments that update `updated_at` on uncontacted leads do not inflate representative daily dialing statistics.
 * **Not Relevant Tracking**: Includes full support for the `not_relevant` status in status badges, KPI counters, and assigned record filters.
 
+### 9.4 Pre-Sales & Referral Places Workspace (`ActorDatabaseWorkspace.tsx`)
+* **Pipeline Status Breakdown**: `GET /api/database` aggregates counts per outreach status using PostgreSQL `COUNT(*) FILTER (...)`. These live counts are rendered directly in the `Outreach Status` filter dropdown options.
+* **Outcome Dropdown Selector**: The legacy multi-button action row is replaced by a single `<select>` dropdown defaulted to the institution's current status (`place.status`). Changing the dropdown immediately submits `PATCH /api/database`.
+* **Collapsible Notes & Scheduling**: Notes and datetime pickers are collapsed behind a `📝 Notes` toggle button on each card. If notes already exist, the button indicates `📝 Notes (Saved)`. Selecting `Callback Scheduled` from the status dropdown automatically expands the notes and callback picker.
+
