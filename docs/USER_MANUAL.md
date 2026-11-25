@@ -242,3 +242,17 @@ Affiliate Promoters are traffic generators and community advocates who promote S
 | **Inbound Enquiries & Link Sharing** | ❌ N/A | ✅ `/e/BR-xxx` | ✅ `/e/PS-xxx` | ✅ `/e/REF-xxx` | ✅ `/e/PM-xxx` |
 | **Default Commission Share** | 0% | 10% (Closer) | 10% (Originator)| 20% (Partner) | 10% (Affiliate) |
 | **Lead Contact Data Visibility** | ✅ Full | ✅ Full | ✅ Full | ✅ Full | 🔒 Masked |
+
+---
+
+## 8. Places Database & Outreach Operations Manual
+
+### 8.1 Navigating the Places Central Database
+* **Fresh Pool**: Houses all newly discovered, unassigned schools. Reps cannot see these until an administrator explicitly allocates them or fulfills a quota request.
+* **Assigned Outreach**: Displays only records that are currently assigned to sales representatives. Filter by representative, city, or outreach stage.
+* **Callback / Activity Indicators**: Uncontacted schools display *"Not contacted"*. Once dialed, the exact date and scheduled callbacks are rendered.
+* **Not Relevant Status**: Mark misclassified records, coaching shops, or non-school institutions as `🚫 Not Relevant` to exclude them from active dialer queues while retaining the audit record.
+
+### 8.2 Rep Profile Performance & Dialing Metrics
+* In `/admin/users/[id]`, the **Worked / Contacted Today** metric tracks unique institutions dialed or progressed today, excluding newly assigned but uncontacted leads.
+* Use the quick-filter pills (`All`, `Worked Today`, `Fresh`, `Callback`, `Interested`, `RNR`, `Switched Off`, `Not Interested`, `Not Relevant`, `Converted`) to inspect a representative's pipeline.

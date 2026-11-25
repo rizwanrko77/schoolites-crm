@@ -266,3 +266,21 @@ Configured via `form_field_configs` (lead form) and `CreateLeadModal.tsx`:
 * `3000 - 4000`
 * `4000+`
 
+---
+
+## 9. Places Database & Outreach Pipeline Technical Architecture
+
+### 9.1 Ingestion & Date Integrity
+* **Scraper Date Isolation**: Google Sheet / Apps Script CSV exports contain `checked_at` dates indicating when the scraper ran. In `POST /api/admin/places/import`, `checked_at` is only mapped to `last_contacted_at` if the row has a genuine outreach disposition (excluding `fresh` and `new`). Uncontacted leads always initialize with `last_contacted_at = NULL`.
+* **Batch Processing**: CSV imports are chunked in batches of 15 using `Promise.all` to avoid gateway timeouts on cloud serverless deployments.
+
+### 9.2 Filter Synchronization & Pagination
+* **Assigned Outreach Isolation**: `GET /api/admin/places?tab=assigned` strictly enforces `b.assigned_to_user_id IS NOT NULL`, preventing unassigned pool records from leaking into the assigned tab.
+* **Filter State Resets**: Any mutation to `search`, `selectedCity`, `selectedStatus`, or `selectedUser` resets pagination to page 1 (`setPage(1)`).
+* **Automatic Page Clamping**: If a filter reduces total pages below the current page offset, the UI clamps back to page 1.
+* **Quota Allocation City Resolution**: When fulfilling a data request with custom notes or multi-city requests (e.g., `"Delhi, Ranchi ( Schools in Jh )"`), the visual allocator performs a case-insensitive check against known database cities and falls back cleanly to `'all'` if not a direct match.
+
+### 9.3 Agent Performance Metrics Calculation
+* **Worked Today Counter**: On `/admin/users/[id]`, `workedToday` only increments for records with active outreach activity (`!isUnworked && (last_contacted_at >= today || updated_at >= today)`). Bulk admin assignments that update `updated_at` on uncontacted leads do not inflate representative daily dialing statistics.
+* **Not Relevant Tracking**: Includes full support for the `not_relevant` status in status badges, KPI counters, and assigned record filters.
+
