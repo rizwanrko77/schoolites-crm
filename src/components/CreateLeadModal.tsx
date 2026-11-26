@@ -318,12 +318,7 @@ export default function CreateLeadModal({
         preferred_slot_time: '',
         preferred_slot_mode: 'Phone/WhatsApp Call',
         expected_start_date: '',
-        additional_details: [
-          `Prospect converted from Places DB (Place ID: ${initialPlace.place_id}).`,
-          initialPlace.website ? `Website: ${initialPlace.website}` : '',
-          initialPlace.rating ? `Google Rating: ${initialPlace.rating}★ (${initialPlace.rating_count || 0} reviews)` : '',
-          initialPlace.notes ? `Previous Outreach Notes: ${initialPlace.notes}` : '',
-        ].filter(Boolean).join('\n'),
+        additional_details: initialPlace.notes ? `Previous Outreach Notes: ${initialPlace.notes}` : '',
       });
       setStartPreset('');
       setCustomStartDate('');

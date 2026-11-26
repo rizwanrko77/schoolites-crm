@@ -126,6 +126,67 @@ export default function LeadDetailModal({
   const isContractEligibleRole = isAdmin || currentUser?.role === 'business_relations';
   const showContractTab = isContractEligibleRole && (lead?.status === 'won' || Boolean(contract));
 
+  const leadPlacesMeta = useMemo(() => {
+    let website: string | null = lead?.place_website || null;
+    let mapsUrl: string | null = lead?.place_maps_url || null;
+    let rating: string | number | null = lead?.place_rating ?? null;
+    let ratingCount: number | null = lead?.place_rating_count ?? null;
+    let placeId: string | null = lead?.google_place_id || null;
+    let isFromPlacesDb = Boolean(lead?.place_business_id || lead?.google_place_id);
+
+    // Fallback: parse from additional_details if missing from direct joins
+    if (lead?.additional_details && typeof lead.additional_details === 'string') {
+      const text = lead.additional_details;
+      if (!isFromPlacesDb && (text.includes('converted from Places DB') || text.includes('Place ID:'))) {
+        isFromPlacesDb = true;
+      }
+      if (!placeId) {
+        const m = text.match(/Place ID:\s*([A-Za-z0-9_\-]+)/);
+        if (m) placeId = m[1];
+      }
+      if (!website) {
+        const m = text.match(/Website:\s*(https?:\/\/[^\s\n\r]+)/i);
+        if (m) website = m[1];
+      }
+      if (!rating) {
+        const m = text.match(/Google Rating:\s*([0-9.]+)\s*★/);
+        if (m) rating = m[1];
+      }
+      if (ratingCount === null) {
+        const m = text.match(/\((\d+)\s*reviews?\)/i);
+        if (m) ratingCount = parseInt(m[1], 10);
+      }
+    }
+
+    if (!mapsUrl && placeId) {
+      mapsUrl = `https://www.google.com/maps/place/?q=place_id:${placeId}`;
+    }
+
+    return {
+      website,
+      mapsUrl,
+      rating: rating !== null ? Number(rating).toFixed(1) : null,
+      ratingCount,
+      placeId,
+      isFromPlacesDb,
+    };
+  }, [lead]);
+
+  const cleanedAdditionalDetails = useMemo(() => {
+    if (!lead?.additional_details) return null;
+    const lines = lead.additional_details.split('\n');
+    const filtered = lines.filter((line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      if (trimmed.startsWith('Prospect converted from Places DB')) return false;
+      if (trimmed.startsWith('Website:')) return false;
+      if (trimmed.startsWith('Google Rating:')) return false;
+      return true;
+    });
+    const cleaned = filtered.join('\n').trim();
+    return cleaned || null;
+  }, [lead?.additional_details]);
+
   useEffect(() => {
     if (!leadId) return;
     if (availableManagers && availableManagers.length > 0) {
@@ -436,12 +497,6 @@ export default function LeadDetailModal({
                 {lead?.lead_code}
               </span>
 
-              {lead?.source_enquiry_code && (
-                <span className="user-code-pill" style={{ color: '#38bdf8', fontSize: '0.78rem' }}>
-                  Converted from {lead.source_enquiry_code}
-                </span>
-              )}
-
               {lead?.is_duplicate && !lead?.duplicate_flag_cleared && (
                 <span
                   style={{
@@ -462,10 +517,153 @@ export default function LeadDetailModal({
               )}
             </div>
 
-            <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>{lead?.institute_name}</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-              {lead?.institute_type} • {lead?.city}, {lead?.country}
-            </p>
+            {/* School Name & Meta Badges (Website, Maps, Rating) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
+              <h2 style={{ fontSize: '1.45rem', fontWeight: 800, margin: 0, color: '#ffffff' }}>
+                {lead?.institute_name}
+              </h2>
+
+              {leadPlacesMeta.website && (
+                <a
+                  href={leadPlacesMeta.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: '9999px',
+                    fontSize: '0.76rem',
+                    fontWeight: 600,
+                    color: '#38bdf8',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title={`Open website: ${leadPlacesMeta.website}`}
+                >
+                  <span>🌐 Website ↗</span>
+                </a>
+              )}
+
+              {leadPlacesMeta.mapsUrl && (
+                <a
+                  href={leadPlacesMeta.mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: '9999px',
+                    fontSize: '0.76rem',
+                    fontWeight: 600,
+                    color: '#34d399',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title="Open location in Google Maps"
+                >
+                  <span>🗺️ Maps ↗</span>
+                </a>
+              )}
+
+              {leadPlacesMeta.rating && (
+                <span
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: '9999px',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    color: '#fbbf24',
+                    background: 'rgba(245, 158, 11, 0.14)',
+                    border: '1px solid rgba(245, 158, 11, 0.32)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                  title={`Google Rating: ${leadPlacesMeta.rating} out of 5 stars`}
+                >
+                  <span>★</span>
+                  <span>{leadPlacesMeta.rating}</span>
+                  {leadPlacesMeta.ratingCount !== null && (
+                    <span style={{ opacity: 0.85, fontWeight: 500, fontSize: '0.72rem' }}>
+                      ({leadPlacesMeta.ratingCount})
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+
+            {/* Subtitle: School Type, City, Country AND Lead Origin Provenance */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.86rem' }}>
+                {lead?.institute_type || 'School'} • {lead?.city}, {lead?.country}
+              </span>
+
+              {/* Provenance / Origin Badge */}
+              {lead?.source_enquiry_code ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    color: '#38bdf8',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                  }}
+                >
+                  <span>⚡</span>
+                  <span>Converted from Enquiry: {lead.source_enquiry_code}</span>
+                </span>
+              ) : leadPlacesMeta.isFromPlacesDb ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    color: '#a78bfa',
+                    background: 'rgba(167, 139, 250, 0.12)',
+                    border: '1px solid rgba(167, 139, 250, 0.25)',
+                  }}
+                  title={leadPlacesMeta.placeId ? `Place ID: ${leadPlacesMeta.placeId}` : undefined}
+                >
+                  <span>🏛️</span>
+                  <span>Converted from Places Database</span>
+                </span>
+              ) : (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    color: 'var(--text-muted)',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <span>✍️</span>
+                  <span>Direct Pipeline Lead</span>
+                </span>
+              )}
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -750,11 +948,11 @@ export default function LeadDetailModal({
                     )}
 
                     {/* Additional Notes */}
-                    {lead?.additional_details && (
+                    {cleanedAdditionalDetails && (
                       <div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Additional Notes / Requirements:</span>
                         <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.02)', padding: '12px', borderRadius: 'var(--radius-sm)', whiteSpace: 'pre-wrap' }}>
-                          {lead.additional_details}
+                          {cleanedAdditionalDetails}
                         </p>
                       </div>
                     )}
