@@ -261,3 +261,10 @@ Affiliate Promoters are traffic generators and community advocates who promote S
 * **Outreach Status Breakdown**: Open the **Outreach Status** filter dropdown to view live lead counts across every status (e.g. *Interested (5)*, *Not Interested (14)*, *Callback Scheduled (8)*).
 * **Updating Lead Stage**: Change the school's stage using the **Status** dropdown on each card. It defaults to the school's current status and saves immediately.
 * **Adding Notes & Scheduling Callbacks**: Click the **📝 Notes** button on any card to reveal the notes text field and callback scheduler. If notes were previously entered, the button highlights with *Notes (Saved)*. Choosing *Callback Scheduled* in the status dropdown automatically opens the callback scheduler.
+
+### 8.4 Lead Details Inspection & School Metadata
+* **Website, Maps, and Rating Header Badges**: When clicking to inspect any lead in `/admin/leads`, `/admin/business`, `/presales`, or `/referral`, direct pills for `🌐 Website ↗`, `🗺️ Maps ↗`, and `★ Google Rating` appear directly next to the school name for immediate 1-click access.
+* **Lead Provenance Pill**: Located right beneath the school type and city subtitle, clearly identifying whether the lead originated from:
+  * `🏛️ Converted from Places Database`
+  * `⚡ Converted from Inbound Enquiry`
+  * `✍️ Direct Pipeline Lead`

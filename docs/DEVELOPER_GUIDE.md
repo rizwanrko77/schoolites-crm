@@ -289,3 +289,16 @@ Configured via `form_field_configs` (lead form) and `CreateLeadModal.tsx`:
 * **Outcome Dropdown Selector**: The legacy multi-button action row is replaced by a single `<select>` dropdown defaulted to the institution's current status (`place.status`). Changing the dropdown immediately submits `PATCH /api/database`.
 * **Collapsible Notes & Scheduling**: Notes and datetime pickers are collapsed behind a `📝 Notes` toggle button on each card. If notes already exist, the button indicates `📝 Notes (Saved)`. Selecting `Callback Scheduled` from the status dropdown automatically expands the notes and callback picker.
 
+### 9.5 Lead Details Modal Header & Provenance Architecture (`LeadDetailModal.tsx`)
+* **Direct Database Join**: `GET /api/leads/[id]` executes a `LEFT JOIN db_businesses b ON b.converted_lead_id = l.id` to surface `place_website`, `place_maps_url`, `place_rating`, `place_rating_count`, and `google_place_id`.
+* **Header Metadata Badges**: Rendered directly alongside the institution name:
+  * `🌐 Website ↗` (opens official school portal)
+  * `🗺️ Maps ↗` (opens Google Maps directions / Place ID page)
+  * `★ Rating (Reviews)` (amber badge with star rating and review count)
+  * Seamless backwards compatibility: intelligently extracts legacy metadata lines from `additional_details` if an older lead was converted before explicit join columns.
+* **Provenance Attribution Badge**: Rendered beneath the institution name/city subtitle:
+  * `🏛️ Converted from Places Database`
+  * `⚡ Converted from Inbound Enquiry: ENQ-xxxx`
+  * `✍️ Direct Pipeline Lead`
+* **Cleaned Notes View**: Strips out system-generated metadata strings from the `Additional Notes / Requirements` display, reserving the section purely for genuine client requirements and operational notes.
+
