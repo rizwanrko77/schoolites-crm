@@ -490,9 +490,10 @@ export default function LeadDetailModal({
         }}
       >
         {/* Top Header */}
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {/* Row 1: Lead Code on Left, Stage Selector & Close Button on Far Right */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <span className="user-code-pill" style={{ color: '#818cf8', fontSize: '0.9rem' }}>
                 {lead?.lead_code}
               </span>
@@ -517,229 +518,241 @@ export default function LeadDetailModal({
               )}
             </div>
 
-            {/* School Name & Meta Badges (Website, Maps, Rating) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
-              <h2 style={{ fontSize: '1.45rem', fontWeight: 800, margin: 0, color: '#ffffff' }}>
-                {lead?.institute_name}
-              </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* Stage Selector */}
+              {(() => {
+                const isClosed = lead?.status === 'won' || lead?.status === 'lost';
+                const canChangeStatus =
+                  currentUser?.role === 'admin' ||
+                  (currentUser?.role === 'business_relations' && lead?.manager_id === currentUser?.id);
 
-              {leadPlacesMeta.website && (
-                <a
-                  href={leadPlacesMeta.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: '9999px',
-                    fontSize: '0.76rem',
-                    fontWeight: 600,
-                    color: '#38bdf8',
-                    background: 'rgba(56, 189, 248, 0.12)',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.15s ease',
-                  }}
-                  title={`Open website: ${leadPlacesMeta.website}`}
-                >
-                  <span>🌐 Website ↗</span>
-                </a>
-              )}
-
-              {leadPlacesMeta.mapsUrl && (
-                <a
-                  href={leadPlacesMeta.mapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: '9999px',
-                    fontSize: '0.76rem',
-                    fontWeight: 600,
-                    color: '#34d399',
-                    background: 'rgba(16, 185, 129, 0.12)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.15s ease',
-                  }}
-                  title="Open location in Google Maps"
-                >
-                  <span>🗺️ Maps ↗</span>
-                </a>
-              )}
-
-              {leadPlacesMeta.rating && (
-                <span
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: '9999px',
-                    fontSize: '0.76rem',
-                    fontWeight: 700,
-                    color: '#fbbf24',
-                    background: 'rgba(245, 158, 11, 0.14)',
-                    border: '1px solid rgba(245, 158, 11, 0.32)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                  }}
-                  title={`Google Rating: ${leadPlacesMeta.rating} out of 5 stars`}
-                >
-                  <span>★</span>
-                  <span>{leadPlacesMeta.rating}</span>
-                  {leadPlacesMeta.ratingCount !== null && (
-                    <span style={{ opacity: 0.85, fontWeight: 500, fontSize: '0.72rem' }}>
-                      ({leadPlacesMeta.ratingCount})
+                if (!canChangeStatus || (isClosed && currentUser?.role !== 'admin')) {
+                  return (
+                    <span
+                      title={isClosed && currentUser?.role !== 'admin' ? "Finalized deal (Admin only)" : "Stage status (Lead Manager / Admin only)"}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '9999px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        color: lead?.status === 'won' ? '#34d399' : lead?.status === 'lost' ? '#f87171' : lead?.status === 'unassigned' ? '#f59e0b' : '#818cf8',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      {getStatusMeta(lead?.status).label}
                     </span>
-                  )}
-                </span>
-              )}
-            </div>
+                  );
+                }
 
-            {/* Subtitle: School Type, City, Country AND Lead Origin Provenance */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.86rem' }}>
-                {lead?.institute_type || 'School'} • {lead?.city}, {lead?.country}
-              </span>
-
-              {/* Provenance / Origin Badge */}
-              {lead?.source_enquiry_code ? (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    color: '#38bdf8',
-                    background: 'rgba(56, 189, 248, 0.12)',
-                    border: '1px solid rgba(56, 189, 248, 0.25)',
-                  }}
-                >
-                  <span>⚡</span>
-                  <span>Converted from Enquiry: {lead.source_enquiry_code}</span>
-                </span>
-              ) : leadPlacesMeta.isFromPlacesDb ? (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    color: '#a78bfa',
-                    background: 'rgba(167, 139, 250, 0.12)',
-                    border: '1px solid rgba(167, 139, 250, 0.25)',
-                  }}
-                  title={leadPlacesMeta.placeId ? `Place ID: ${leadPlacesMeta.placeId}` : undefined}
-                >
-                  <span>🏛️</span>
-                  <span>Converted from Places Database</span>
-                </span>
-              ) : (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    color: 'var(--text-muted)',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid var(--border-subtle)',
-                  }}
-                >
-                  <span>✍️</span>
-                  <span>Direct Pipeline Lead</span>
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {/* Stage Selector */}
-            {(() => {
-              const isClosed = lead?.status === 'won' || lead?.status === 'lost';
-              const canChangeStatus =
-                currentUser?.role === 'admin' ||
-                (currentUser?.role === 'business_relations' && lead?.manager_id === currentUser?.id);
-
-              if (!canChangeStatus || (isClosed && currentUser?.role !== 'admin')) {
                 return (
-                  <span
-                    title={isClosed && currentUser?.role !== 'admin' ? "Finalized deal (Admin only)" : "Stage status (Lead Manager / Admin only)"}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '9999px',
-                      fontSize: '0.82rem',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      color: lead?.status === 'won' ? '#34d399' : lead?.status === 'lost' ? '#f87171' : lead?.status === 'unassigned' ? '#f59e0b' : '#818cf8',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    {getStatusMeta(lead?.status).label}
-                  </span>
-                );
-              }
-
-              return (
-                <select
-                  value={lead?.status || 'unassigned'}
-                  onChange={(e) => {
-                    const nextVal = e.target.value;
-                    if (nextVal !== (lead?.status || 'unassigned')) {
-                      setPendingStatusChange({ from: lead?.status || 'unassigned', to: nextVal });
-                      if ((!lead?.manager_id || lead?.status === 'unassigned') && nextVal !== 'unassigned') {
-                        if (currentUser?.role === 'business_relations') {
-                          setPendingManagerId(currentUser.id);
+                  <select
+                    value={lead?.status || 'unassigned'}
+                    onChange={(e) => {
+                      const nextVal = e.target.value;
+                      if (nextVal !== (lead?.status || 'unassigned')) {
+                        setPendingStatusChange({ from: lead?.status || 'unassigned', to: nextVal });
+                        if ((!lead?.manager_id || lead?.status === 'unassigned') && nextVal !== 'unassigned') {
+                          if (currentUser?.role === 'business_relations') {
+                            setPendingManagerId(currentUser.id);
+                          } else {
+                            setPendingManagerId('');
+                          }
                         } else {
                           setPendingManagerId('');
                         }
-                      } else {
-                        setPendingManagerId('');
                       }
-                    }
-                  }}
-                  disabled={isUpdatingStatus}
-                  className="input-field"
-                  style={{
-                    width: 'auto',
-                    padding: '6px 12px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    background: '#0f172a',
-                    color: getStatusMeta(lead?.status).color,
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {LEAD_STATUSES.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.label}
-                    </option>
-                  ))}
-                </select>
-              );
-            })()}
+                    }}
+                    disabled={isUpdatingStatus}
+                    className="input-field"
+                    style={{
+                      width: 'auto',
+                      padding: '6px 12px',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      background: '#0f172a',
+                      color: getStatusMeta(lead?.status).color,
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {LEAD_STATUSES.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.label}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()}
 
-            <button onClick={onClose} style={{ color: 'var(--text-muted)', fontSize: '1.4rem' }}>
-              ✕
-            </button>
+              <button
+                onClick={onClose}
+                style={{
+                  color: 'var(--text-muted)',
+                  fontSize: '1.4rem',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '2px 6px',
+                  lineHeight: 1,
+                }}
+                title="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Row 2: School Name & Meta Badges (Website, Maps, Rating) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
+            <h2 style={{ fontSize: '1.45rem', fontWeight: 800, margin: 0, color: '#ffffff' }}>
+              {lead?.institute_name}
+            </h2>
+
+            {leadPlacesMeta.website && (
+              <a
+                href={leadPlacesMeta.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: '9999px',
+                  fontSize: '0.76rem',
+                  fontWeight: 600,
+                  color: '#38bdf8',
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'all 0.15s ease',
+                }}
+                title={`Open website: ${leadPlacesMeta.website}`}
+              >
+                <span>🌐 Website ↗</span>
+              </a>
+            )}
+
+            {leadPlacesMeta.mapsUrl && (
+              <a
+                href={leadPlacesMeta.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: '9999px',
+                  fontSize: '0.76rem',
+                  fontWeight: 600,
+                  color: '#34d399',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'all 0.15s ease',
+                }}
+                title="Open location in Google Maps"
+              >
+                <span>🗺️ Maps ↗</span>
+              </a>
+            )}
+
+            {leadPlacesMeta.rating && (
+              <span
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: '9999px',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: '#fbbf24',
+                  background: 'rgba(245, 158, 11, 0.14)',
+                  border: '1px solid rgba(245, 158, 11, 0.32)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title={`Google Rating: ${leadPlacesMeta.rating} out of 5 stars`}
+              >
+                <span>★</span>
+                <span>{leadPlacesMeta.rating}</span>
+                {leadPlacesMeta.ratingCount !== null && (
+                  <span style={{ opacity: 0.85, fontWeight: 500, fontSize: '0.72rem' }}>
+                    ({leadPlacesMeta.ratingCount})
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+
+          {/* Row 3: Subtitle: School Type, City, Country AND Lead Origin Provenance */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.86rem' }}>
+              {lead?.institute_type || 'School'} • {lead?.city}, {lead?.country}
+            </span>
+
+            {/* Provenance / Origin Badge */}
+            {lead?.source_enquiry_code ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  color: '#38bdf8',
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
+                }}
+              >
+                <span>⚡</span>
+                <span>Converted from Enquiry: {lead.source_enquiry_code}</span>
+              </span>
+            ) : leadPlacesMeta.isFromPlacesDb ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  color: '#a78bfa',
+                  background: 'rgba(167, 139, 250, 0.12)',
+                  border: '1px solid rgba(167, 139, 250, 0.25)',
+                }}
+                title={leadPlacesMeta.placeId ? `Place ID: ${leadPlacesMeta.placeId}` : undefined}
+              >
+                <span>🏛️</span>
+                <span>Converted from Places Database</span>
+              </span>
+            ) : (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                <span>✍️</span>
+                <span>Direct Pipeline Lead</span>
+              </span>
+            )}
           </div>
         </div>
 
