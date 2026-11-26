@@ -800,7 +800,7 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                     <span>Inspect</span>
                   </button>
 
-                  {place.status !== 'converted_to_lead' && (
+                  {!place.converted_lead_id && place.status !== 'converted_to_lead' ? (
                     <button
                       onClick={() => onConvertToLead(place)}
                       className="btn-primary"
@@ -816,6 +816,23 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                       <span>🎯</span>
                       <span>Convert to Lead ↗</span>
                     </button>
+                  ) : (
+                    <span
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#34d399',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span>✅ Lead: {place.converted_lead_code || 'Converted'}</span>
+                    </span>
                   )}
                 </div>
               </div>
@@ -834,53 +851,77 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                   border: '1px solid var(--border-subtle)',
                 }}
               >
-                {/* Status Dropdown */}
+                {/* Status Dropdown or Converted Badge */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                     Status:
                   </label>
-                  <select
-                    disabled={updatingId === place.id}
-                    value={
-                      ['fresh', 'unassigned', 'assigned'].includes(place.status)
-                        ? 'new'
-                        : place.status === 'callback'
-                        ? 'contact_later'
-                        : place.status
-                    }
-                    onChange={(e) => handleUpdateStatus(place, e.target.value)}
-                    className="input-field"
-                    style={{
-                      padding: '6px 12px',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      background: '#090d16',
-                      color:
-                        place.status === 'interested'
-                          ? '#34d399'
-                          : place.status === 'contact_later' || place.status === 'callback'
-                          ? '#818cf8'
-                          : place.status === 'rnr'
-                          ? '#fbbf24'
-                          : place.status === 'switched_off' || place.status === 'not_interested'
-                          ? '#f87171'
-                          : place.status === 'not_relevant'
-                          ? '#94a3b8'
-                          : '#ffffff',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="new">📋 New (Uncontacted)</option>
-                    <option value="rnr">📞 Ringing No Response (RNR)</option>
-                    <option value="switched_off">📵 Switched Off</option>
-                    <option value="interested">🔥 Interested</option>
-                    <option value="following_up">🔄 Following Up</option>
-                    <option value="contact_later">📅 Callback Scheduled</option>
-                    <option value="not_interested">✕ Not Interested</option>
-                    <option value="not_relevant">🚫 Not Relevant</option>
-                    <option value="converted_to_lead">🎯 Converted to Lead</option>
-                  </select>
+                  {place.status === 'converted_to_lead' || place.converted_lead_id ? (
+                    <span
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: '9999px',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#34d399',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      title="This prospect has been converted into a CRM Lead. Status is finalized."
+                    >
+                      <span>🎯 Converted to Lead</span>
+                      {place.converted_lead_code && (
+                        <span style={{ color: '#ffffff', background: 'rgba(16, 185, 129, 0.4)', padding: '1px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                          {place.converted_lead_code}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <select
+                      disabled={updatingId === place.id}
+                      value={
+                        ['fresh', 'unassigned', 'assigned'].includes(place.status)
+                          ? 'new'
+                          : place.status === 'callback'
+                          ? 'contact_later'
+                          : place.status
+                      }
+                      onChange={(e) => handleUpdateStatus(place, e.target.value)}
+                      className="input-field"
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        background: '#090d16',
+                        color:
+                          place.status === 'interested'
+                            ? '#34d399'
+                            : place.status === 'contact_later' || place.status === 'callback'
+                            ? '#818cf8'
+                            : place.status === 'rnr'
+                            ? '#fbbf24'
+                            : place.status === 'switched_off' || place.status === 'not_interested'
+                            ? '#f87171'
+                            : place.status === 'not_relevant'
+                            ? '#94a3b8'
+                            : '#ffffff',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="new">📋 New (Uncontacted)</option>
+                      <option value="rnr">📞 Ringing No Response (RNR)</option>
+                      <option value="switched_off">📵 Switched Off</option>
+                      <option value="interested">🔥 Interested</option>
+                      <option value="following_up">🔄 Following Up</option>
+                      <option value="contact_later">📅 Callback Scheduled</option>
+                      <option value="not_interested">✕ Not Interested</option>
+                      <option value="not_relevant">🚫 Not Relevant</option>
+                    </select>
+                  )}
                   {updatingId === place.id && (
                     <span style={{ fontSize: '0.74rem', color: '#38bdf8' }}>Updating...</span>
                   )}
@@ -1190,7 +1231,7 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                 </a>
               )}
 
-              {inspectedPlace.status !== 'converted_to_lead' && (
+              {!inspectedPlace.converted_lead_id && inspectedPlace.status !== 'converted_to_lead' ? (
                 <button
                   onClick={() => {
                     setInspectedPlace(null);
@@ -1209,6 +1250,23 @@ export default function ActorDatabaseWorkspace({ user, onConvertToLead }: ActorD
                   <span>🎯</span>
                   <span>Convert to Lead ↗</span>
                 </button>
+              ) : (
+                <span
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    color: '#34d399',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>✅ Lead: {inspectedPlace.converted_lead_code || 'Converted'}</span>
+                </span>
               )}
             </div>
 

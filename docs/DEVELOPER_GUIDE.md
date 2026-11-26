@@ -302,3 +302,8 @@ Configured via `form_field_configs` (lead form) and `CreateLeadModal.tsx`:
   * `✍️ Direct Pipeline Lead`
 * **Cleaned Notes View**: Strips out system-generated metadata strings from the `Additional Notes / Requirements` display, reserving the section purely for genuine client requirements and operational notes.
 
+### 9.6 Lead Conversion Integrity & Outreach Status Guardrails
+* **Outcome vs. Conversion Separation**: The card-level status dropdown in `ActorDatabaseWorkspace.tsx` is strictly dedicated to phone outreach dispositions (`new`, `rnr`, `switched_off`, `interested`, `following_up`, `contact_later`, `not_interested`, `not_relevant`). The `converted_to_lead` option is excluded from manual selection to prevent creating orphaned records lacking CRM qualification data.
+* **Backend Guardrails (`PATCH /api/database`)**: Rejects direct requests to change status to `converted_to_lead` (HTTP 400). Only `POST /api/database/convert-lead` (triggered via `CreateLeadModal`) can set this status and link a valid `converted_lead_id`.
+* **Converted State Locking**: Once a place is linked to a lead (`status = 'converted_to_lead'` or `converted_lead_id IS NOT NULL`), outreach status changes are locked (`PATCH /api/database` preserves the converted status unless executed by an administrator). The card displays a read-only pill: `🎯 Converted to Lead [LD-xxxx]`.
+

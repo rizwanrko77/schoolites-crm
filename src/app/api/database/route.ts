@@ -207,8 +207,14 @@ export async function PATCH(req: NextRequest) {
       'not_interested',
       'not_relevant',
       'following_up',
-      'converted_to_lead',
     ];
+
+    if (status && status === 'converted_to_lead') {
+      return NextResponse.json(
+        { error: 'Direct status change to "converted_to_lead" is not permitted. Please use the "Convert to Lead" button to qualify and create a CRM lead.' },
+        { status: 400 }
+      );
+    }
 
     if (status && !validStatuses.includes(status)) {
       return NextResponse.json({ error: 'Invalid outreach status' }, { status: 400 });
@@ -216,7 +222,7 @@ export async function PATCH(req: NextRequest) {
 
     // Verify record is assigned to current user (unless admin)
     const existing = await sql`
-      SELECT id, place_id, name, status, notes, assigned_to_user_id 
+      SELECT id, place_id, name, status, notes, assigned_to_user_id, converted_lead_id 
       FROM db_businesses 
       WHERE (id::text = ${place_id} OR place_id = ${place_id})
       LIMIT 1;
@@ -231,8 +237,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'You are not assigned to this record' }, { status: 403 });
     }
 
+    // Guardrail: prevent changing status away from converted_to_lead if already converted
+    if ((place.status === 'converted_to_lead' || place.converted_lead_id) && status && status !== place.status && currentUser.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'This school has already been converted to a CRM Lead. Its outreach status cannot be reverted.' },
+        { status: 400 }
+      );
+    }
+
     const oldStatus = place.status;
-    const newStatus = status || oldStatus;
+    const newStatus = (place.status === 'converted_to_lead' && currentUser.role !== 'admin') ? 'converted_to_lead' : (status || oldStatus);
     const updatedNotes = notes !== undefined ? notes : place.notes;
     let callbackTimestamp: string | null = null;
     if (callback_at && typeof callback_at === 'string' && callback_at.trim()) {
