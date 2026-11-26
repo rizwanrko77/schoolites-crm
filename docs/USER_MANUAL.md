@@ -269,3 +269,6 @@ Affiliate Promoters are traffic generators and community advocates who promote S
   * `🏛️ Converted from Places Database`
   * `⚡ Converted from Inbound Enquiry`
   * `✍️ Direct Pipeline Lead`
+
+### 8.5 Assigning Lead Managers & Active Roster
+* When an administrator or Business Relations closer transitions an unassigned lead into the active sales pipeline, the **Assign Lead Manager** dropdown strictly displays active Business Relations representatives (`is_active = true`). Deactivated or test team members are excluded from selection.

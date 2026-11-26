@@ -190,7 +190,7 @@ export default function LeadDetailModal({
   useEffect(() => {
     if (!leadId) return;
     if (availableManagers && availableManagers.length > 0) {
-      setManagersList(availableManagers);
+      setManagersList(availableManagers.filter((m: any) => m.is_active !== false));
     } else if (currentUser?.role === 'admin' || currentUser?.role === 'business_relations') {
       fetch('/api/leads/managers')
         .then((res) => (res.ok ? res.json() : { managers: [] }))

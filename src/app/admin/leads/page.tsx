@@ -152,9 +152,9 @@ export default function AdminLeadsPage() {
       .then((res) => res.json())
       .then((data) => setCurrentUser(data.user));
 
-    fetch('/api/admin/users?role=business_relations')
-      .then((res) => (res.ok ? res.json() : { users: [] }))
-      .then((data) => setAvailableManagers(data.users || []));
+    fetch('/api/leads/managers')
+      .then((res) => (res.ok ? res.json() : { managers: [] }))
+      .then((data) => setAvailableManagers(data.managers || data.users || []));
   }, []);
 
   useEffect(() => {

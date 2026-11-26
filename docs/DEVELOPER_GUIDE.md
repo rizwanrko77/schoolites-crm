@@ -307,3 +307,8 @@ Configured via `form_field_configs` (lead form) and `CreateLeadModal.tsx`:
 * **Backend Guardrails (`PATCH /api/database`)**: Rejects direct requests to change status to `converted_to_lead` (HTTP 400). Only `POST /api/database/convert-lead` (triggered via `CreateLeadModal`) can set this status and link a valid `converted_lead_id`.
 * **Converted State Locking**: Once a place is linked to a lead (`status = 'converted_to_lead'` or `converted_lead_id IS NOT NULL`), outreach status changes are locked (`PATCH /api/database` preserves the converted status unless executed by an administrator). The card displays a read-only pill: `🎯 Converted to Lead [LD-xxxx]`.
 
+### 9.7 Lead Manager Assignment & Active User Filtering
+* **Dedicated Manager Source**: Lead manager selection (`admin/leads`, `business`, and `LeadDetailModal`) consumes `/api/leads/managers` rather than generic user queries. The endpoint strictly queries `WHERE role = 'business_relations' AND is_active = TRUE`.
+* **Client-Side Defense**: `LeadDetailModal` defensively filters `availableManagers` using `.filter(m => m.is_active !== false)`.
+* **Database User Purge**: Deactivated test accounts (`ADM-101`, `BR-104`, `PS-102`, `REF-112`, etc.) were safely deleted, re-pooling their assigned places to the fresh unassigned pool and nullifying actor pointers in audit logs to preserve historical log text.
+

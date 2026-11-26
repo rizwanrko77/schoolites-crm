@@ -310,11 +310,11 @@ export default function BusinessRelationsPage() {
       .catch(() => router.push('/login'));
   }, [router]);
 
-  // Load available BR team members for reassignment
+  // Load available active BR team members for reassignment
   useEffect(() => {
-    fetch('/api/admin/users?role=business_relations')
-      .then((res) => (res.ok ? res.json() : { users: [] }))
-      .then((data) => setAvailableManagers(data.users || []))
+    fetch('/api/leads/managers')
+      .then((res) => (res.ok ? res.json() : { managers: [] }))
+      .then((data) => setAvailableManagers(data.managers || data.users || []))
       .catch(() => {});
   }, []);
 
