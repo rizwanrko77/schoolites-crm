@@ -272,3 +272,17 @@ Affiliate Promoters are traffic generators and community advocates who promote S
 
 ### 8.5 Assigning Lead Managers & Active Roster
 * When an administrator or Business Relations closer transitions an unassigned lead into the active sales pipeline, the **Assign Lead Manager** dropdown strictly displays active Business Relations representatives (`is_active = true`). Deactivated or test team members are excluded from selection.
+
+### 8.6 Dynamic Date Filtering & Custom Date Range for Representative Database Portfolio (`/admin/users/[id]`)
+* **Dynamic Status Pills Breakdown**: In a representative's **Assigned Database** tab, all status filter pills (`All`, `Worked`, `Fresh`, `Callback`, `Following Up`, `Interested`, `RNR`, `Switched Off`, `Not Interested`, `Not Relevant`, `Converted`) automatically update their numerical badges whenever a different date window is chosen.
+* **Selecting Preset Windows**:
+  * **All Time**: Shows all records ever assigned to this representative and their current all-time status counts.
+  * **Today**: Shows only records dialed, updated, or newly allocated today.
+  * **Last 7 Days**: Filters to outreach and allocation activities within the trailing 7 days.
+  * **This Month**: Filters to outreach and allocation activities within the current calendar month.
+* **Using Custom Date Range**:
+  * Click the **Custom** date button.
+  * An interactive filter bar appears with **From:** and **To:** calendar selectors.
+  * Select your desired start and end dates. The status pills and records table immediately adjust to show the representative's work and newly assigned leads within that exact date window.
+  * Click **Reset Dates** at any time to clear the custom date bounds.
+

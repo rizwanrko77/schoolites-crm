@@ -201,7 +201,9 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
   // Database activity & assigned records state
   const [databaseMetrics, setDatabaseMetrics] = useState<DatabaseMetrics | null>(null);
   const [assignedBusinesses, setAssignedBusinesses] = useState<AssignedBusinessItem[]>([]);
-  const [dbDateFilter, setDbDateFilter] = useState<'all' | 'today' | '7days' | 'month'>('all');
+  const [dbDateFilter, setDbDateFilter] = useState<'all' | 'today' | '7days' | 'month' | 'custom'>('all');
+  const [dbCustomStartDate, setDbCustomStartDate] = useState<string>('');
+  const [dbCustomEndDate, setDbCustomEndDate] = useState<string>('');
   const [dbStatusFilter, setDbStatusFilter] = useState<string>('all');
   const [dbSearchQuery, setDbSearchQuery] = useState('');
   const [dbSubView, setDbSubView] = useState<'directory' | 'cadence'>('directory');
@@ -373,9 +375,112 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
     return `${m}m ${s}s`;
   };
 
-  const dbAssignedStats = useMemo(() => {
-    const total = assignedBusinesses.length;
+  const isRecordInDateRange = (
+    item: AssignedBusinessItem,
+    filter: 'all' | 'today' | '7days' | 'month' | 'custom',
+    customStart?: string,
+    customEnd?: string
+  ) => {
+    if (filter === 'all') return true;
+
+    const st = (item.status || '').toLowerCase();
+    const isUnworked = st === 'assigned' || st === 'fresh' || st === 'new' || st === 'unassigned' || !item.last_contacted_at;
+
+    // For unworked/fresh leads, check when they were assigned to this rep
+    // For worked leads, check when they were contacted or updated
+    const dateStr = isUnworked
+      ? (item.assigned_at || item.created_at)
+      : (item.last_contacted_at || item.updated_at || item.assigned_at);
+
+    if (!dateStr) return false;
+    const itemTime = new Date(dateStr).getTime();
+    if (isNaN(itemTime)) return false;
+
+    const now = new Date();
+
+    if (filter === 'today') {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+      return itemTime >= todayStart && itemTime <= todayEnd;
+    }
+
+    if (filter === '7days') {
+      const sevenDaysStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).getTime(); // 7 days inclusive
+      return itemTime >= sevenDaysStart;
+    }
+
+    if (filter === 'month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return itemTime >= startOfMonth;
+    }
+
+    if (filter === 'custom') {
+      if (customStart) {
+        const [y, m, d] = customStart.split('-').map(Number);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          const s = new Date(y, m - 1, d, 0, 0, 0, 0);
+          if (itemTime < s.getTime()) return false;
+        }
+      }
+      if (customEnd) {
+        const [y, m, d] = customEnd.split('-').map(Number);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          const e = new Date(y, m - 1, d, 23, 59, 59, 999);
+          if (itemTime > e.getTime()) return false;
+        }
+      }
+      return true;
+    }
+
+    return true;
+  };
+
+  const overallDbStats = useMemo(() => {
+    let callbacks = 0;
+    let interested = 0;
+    let converted = 0;
     let workedToday = 0;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartTime = todayStart.getTime();
+
+    assignedBusinesses.forEach((b) => {
+      const st = (b.status || '').toLowerCase();
+      const isUnworked = st === 'assigned' || st === 'fresh' || st === 'new' || st === 'unassigned' || !b.last_contacted_at;
+      const contactTime = b.last_contacted_at ? new Date(b.last_contacted_at).getTime() : 0;
+      const updatedTime = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+
+      if (!isUnworked && (contactTime >= todayStartTime || updatedTime >= todayStartTime)) {
+        workedToday++;
+      }
+
+      if (st === 'converted_to_lead' || Boolean(b.converted_lead_id)) converted++;
+      else if (st === 'callback' || st === 'contact_later' || Boolean(b.callback_at)) callbacks++;
+      else if (st === 'interested') interested++;
+    });
+    return {
+      total: assignedBusinesses.length,
+      callbacks,
+      interested,
+      converted,
+      workedToday,
+    };
+  }, [assignedBusinesses]);
+
+  const dateScopedBusinesses = useMemo(() => {
+    return assignedBusinesses.filter((b) => isRecordInDateRange(b, dbDateFilter, dbCustomStartDate, dbCustomEndDate));
+  }, [assignedBusinesses, dbDateFilter, dbCustomStartDate, dbCustomEndDate]);
+
+  const workedLabel = useMemo(() => {
+    if (dbDateFilter === 'all' || dbDateFilter === 'today') return 'Worked Today';
+    if (dbDateFilter === '7days') return 'Worked (7d)';
+    if (dbDateFilter === 'month') return 'Worked (Month)';
+    return 'Worked in Range';
+  }, [dbDateFilter]);
+
+  const dbAssignedStats = useMemo(() => {
+    const total = dateScopedBusinesses.length;
+    let workedCount = 0;
     let callbackCount = 0;
     let convertedCount = 0;
     let interestedCount = 0;
@@ -390,13 +495,20 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
     todayStart.setHours(0, 0, 0, 0);
     const todayStartTime = todayStart.getTime();
 
-    assignedBusinesses.forEach((b) => {
+    dateScopedBusinesses.forEach((b) => {
       const st = (b.status || '').toLowerCase();
       const isUnworked = st === 'assigned' || st === 'fresh' || st === 'new' || st === 'unassigned' || !b.last_contacted_at;
       const contactTime = b.last_contacted_at ? new Date(b.last_contacted_at).getTime() : 0;
       const updatedTime = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-      if (!isUnworked && (contactTime >= todayStartTime || updatedTime >= todayStartTime)) {
-        workedToday++;
+
+      if (!isUnworked) {
+        if (dbDateFilter === 'all') {
+          if (contactTime >= todayStartTime || updatedTime >= todayStartTime) {
+            workedCount++;
+          }
+        } else {
+          workedCount++;
+        }
       }
 
       if (st === 'converted_to_lead' || Boolean(b.converted_lead_id)) {
@@ -422,7 +534,8 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
 
     return {
       total,
-      workedToday,
+      workedCount,
+      workedToday: workedCount,
       callbackCount,
       convertedCount,
       interestedCount,
@@ -433,10 +546,10 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
       notRelevantCount,
       freshCount,
     };
-  }, [assignedBusinesses]);
+  }, [dateScopedBusinesses, dbDateFilter]);
 
   const filteredAssignedBusinesses = useMemo(() => {
-    return assignedBusinesses.filter((item) => {
+    return dateScopedBusinesses.filter((item) => {
       // 1. Search Query
       if (dbSearchQuery.trim()) {
         const q = dbSearchQuery.toLowerCase();
@@ -455,47 +568,39 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
         if (dbStatusFilter === 'assigned') {
           if (st !== 'assigned' && st !== 'fresh' && st !== 'new' && st !== 'unassigned') return false;
         } else if (dbStatusFilter === 'callback') {
-          if (st !== 'callback' && st !== 'contact_later') return false;
+          if (st !== 'callback' && st !== 'contact_later' && !item.callback_at) return false;
+        } else if (dbStatusFilter === 'converted_to_lead') {
+          if (st !== 'converted_to_lead' && !item.converted_lead_id) return false;
         } else if (dbStatusFilter === 'following_up') {
           if (st !== 'following_up') return false;
         } else if (dbStatusFilter === 'switched_off') {
           if (st !== 'switched_off') return false;
+        } else if (dbStatusFilter === 'interested') {
+          if (st !== 'interested') return false;
+        } else if (dbStatusFilter === 'rnr') {
+          if (st !== 'rnr') return false;
+        } else if (dbStatusFilter === 'not_interested') {
+          if (st !== 'not_interested') return false;
+        } else if (dbStatusFilter === 'not_relevant') {
+          if (st !== 'not_relevant') return false;
         } else if (dbStatusFilter === 'worked_today') {
           const isUnworked = st === 'assigned' || st === 'fresh' || st === 'new' || st === 'unassigned' || !item.last_contacted_at;
           if (isUnworked) return false;
-          const contactTime = item.last_contacted_at ? new Date(item.last_contacted_at).getTime() : 0;
-          const updatedTime = item.updated_at ? new Date(item.updated_at).getTime() : 0;
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          if (contactTime < todayStart.getTime() && updatedTime < todayStart.getTime()) return false;
+          if (dbDateFilter === 'all') {
+            const contactTime = item.last_contacted_at ? new Date(item.last_contacted_at).getTime() : 0;
+            const updatedTime = item.updated_at ? new Date(item.updated_at).getTime() : 0;
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            if (contactTime < todayStart.getTime() && updatedTime < todayStart.getTime()) return false;
+          }
         } else {
           if (st !== dbStatusFilter) return false;
         }
       }
 
-      // 3. Date Range Filter
-      if (dbDateFilter !== 'all') {
-        const itemDateStr = item.last_contacted_at || item.updated_at || item.assigned_at;
-        if (!itemDateStr) return false;
-        const itemTime = new Date(itemDateStr).getTime();
-        const now = Date.now();
-
-        if (dbDateFilter === 'today') {
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          if (itemTime < todayStart.getTime()) return false;
-        } else if (dbDateFilter === '7days') {
-          const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-          if (itemTime < sevenDaysAgo) return false;
-        } else if (dbDateFilter === 'month') {
-          const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
-          if (itemTime < monthAgo) return false;
-        }
-      }
-
       return true;
     });
-  }, [assignedBusinesses, dbSearchQuery, dbStatusFilter, dbDateFilter]);
+  }, [dateScopedBusinesses, dbSearchQuery, dbStatusFilter, dbDateFilter]);
 
   const handleInspectLog = (log: DatabasePlaceHistoryItem) => {
     const found = assignedBusinesses.find(b => b.place_id === log.place_id || b.id === log.business_id);
@@ -1100,7 +1205,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                 Total Assigned Leads
               </div>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#ffffff', marginTop: '6px' }}>
-                {dbAssignedStats.total}
+                {overallDbStats.total}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 Allocated to this member
@@ -1112,11 +1217,11 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                 Worked / Contacted Today
               </div>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#34d399', marginTop: '6px' }}>
-                {dbAssignedStats.workedToday}
+                {overallDbStats.workedToday}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 {databaseMetrics?.todayChangesCount
-                  ? `${dbAssignedStats.workedToday} unique places (${databaseMetrics.todayChangesCount} total actions logged today)`
+                  ? `${overallDbStats.workedToday} unique places (${databaseMetrics.todayChangesCount} total actions logged today)`
                   : 'Updated since 00:00 IST'}
               </div>
             </div>
@@ -1126,7 +1231,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                 Scheduled Callbacks
               </div>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#818cf8', marginTop: '6px' }}>
-                {dbAssignedStats.callbackCount}
+                {overallDbStats.callbacks}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 Pending follow-up calls
@@ -1138,7 +1243,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                 Interested Prospects
               </div>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#22d3ee', marginTop: '6px' }}>
-                {dbAssignedStats.interestedCount}
+                {overallDbStats.interested}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 High intent schools
@@ -1150,10 +1255,10 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                 Places Converted to Leads
               </div>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fbbf24', marginTop: '6px' }}>
-                {dbAssignedStats.convertedCount}
+                {overallDbStats.converted}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                {dbAssignedStats.convertedCount} of {dbAssignedStats.total} places ({stats?.totalLeads || 0} total CRM leads) 🎉
+                {overallDbStats.converted} of {overallDbStats.total} places ({stats?.totalLeads || 0} total CRM leads) 🎉
               </div>
             </div>
           </div>
@@ -1292,7 +1397,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
 
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
               {dbSubView === 'directory'
-                ? `Showing ${filteredAssignedBusinesses.length} of ${assignedBusinesses.length} assigned records`
+                ? `Showing ${filteredAssignedBusinesses.length} of ${dateScopedBusinesses.length} assigned records${dbDateFilter !== 'all' ? ` in selected period (${assignedBusinesses.length} total)` : ''}`
                 : `${databaseMetrics?.todayChangesCount || 0} transitions recorded today`}
             </div>
           </div>
@@ -1315,7 +1420,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {[
                       { id: 'all', label: `All (${dbAssignedStats.total})` },
-                      { id: 'worked_today', label: `Worked Today (${dbAssignedStats.workedToday})` },
+                      { id: 'worked_today', label: `${workedLabel} (${dbAssignedStats.workedCount})` },
                       { id: 'assigned', label: `Fresh (${dbAssignedStats.freshCount})` },
                       { id: 'callback', label: `Callback (${dbAssignedStats.callbackCount})` },
                       { id: 'following_up', label: `Following Up (${dbAssignedStats.followingUpCount})` },
@@ -1348,18 +1453,22 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                   </div>
 
                   {/* Date Range Selector */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Date Range:</span>
                     {[
                       { id: 'all', label: 'All Time' },
                       { id: 'today', label: 'Today' },
                       { id: '7days', label: 'Last 7 Days' },
                       { id: 'month', label: 'This Month' },
+                      { id: 'custom', label: 'Custom' },
                     ].map((dr) => (
                       <button
                         key={dr.id}
                         type="button"
-                        onClick={() => setDbDateFilter(dr.id as any)}
+                        onClick={() => {
+                          setDbDateFilter(dr.id as any);
+                          setDbStatusFilter('all');
+                        }}
                         style={{
                           padding: '4px 10px',
                           borderRadius: '6px',
@@ -1369,6 +1478,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                           border: dbDateFilter === dr.id ? '1px solid #818cf8' : '1px solid transparent',
                           background: dbDateFilter === dr.id ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.03)',
                           color: dbDateFilter === dr.id ? '#ffffff' : 'var(--text-muted)',
+                          transition: 'all 0.15s ease',
                         }}
                       >
                         {dr.label}
@@ -1376,6 +1486,86 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                     ))}
                   </div>
                 </div>
+
+                {/* Custom Date Range Picker Bar (Shown when Custom is selected) */}
+                {dbDateFilter === 'custom' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      background: 'rgba(99, 102, 241, 0.08)',
+                      border: '1px solid rgba(99, 102, 241, 0.25)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#a5b4fc' }}>From:</span>
+                      <input
+                        type="date"
+                        value={dbCustomStartDate}
+                        onChange={(e) => setDbCustomStartDate(e.target.value)}
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          background: 'rgba(0, 0, 0, 0.4)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          color: '#ffffff',
+                          fontSize: '0.78rem',
+                          colorScheme: 'dark',
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#a5b4fc' }}>To:</span>
+                      <input
+                        type="date"
+                        value={dbCustomEndDate}
+                        onChange={(e) => setDbCustomEndDate(e.target.value)}
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          background: 'rgba(0, 0, 0, 0.4)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          color: '#ffffff',
+                          fontSize: '0.78rem',
+                          colorScheme: 'dark',
+                        }}
+                      />
+                    </div>
+                    {(dbCustomStartDate || dbCustomEndDate) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDbCustomStartDate('');
+                          setDbCustomEndDate('');
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          background: 'rgba(239, 68, 68, 0.18)',
+                          border: '1px solid rgba(239, 68, 68, 0.35)',
+                          color: '#f87171',
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reset Dates
+                      </button>
+                    )}
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                      {dbCustomStartDate && dbCustomEndDate
+                        ? `Filtering records between ${dbCustomStartDate} and ${dbCustomEndDate}`
+                        : dbCustomStartDate
+                        ? `Filtering records from ${dbCustomStartDate} onwards`
+                        : dbCustomEndDate
+                        ? `Filtering records up to ${dbCustomEndDate}`
+                        : 'Select start and end dates to filter assigned records and status breakdown'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Search Input */}
                 <div style={{ position: 'relative' }}>
@@ -1421,7 +1611,7 @@ export default function UserPerformancePage({ params }: { params: Promise<{ id: 
                 <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>Assigned Database Leads</h3>
                   <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    Showing <strong>{filteredAssignedBusinesses.length}</strong> of {assignedBusinesses.length} records
+                    Showing <strong>{filteredAssignedBusinesses.length}</strong> of {dateScopedBusinesses.length} records{dbDateFilter !== 'all' ? ` in selected period (${assignedBusinesses.length} total)` : ''}
                   </span>
                 </div>
 

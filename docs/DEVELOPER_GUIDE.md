@@ -312,3 +312,15 @@ Configured via `form_field_configs` (lead form) and `CreateLeadModal.tsx`:
 * **Client-Side Defense**: `LeadDetailModal` defensively filters `availableManagers` using `.filter(m => m.is_active !== false)`.
 * **Database User Purge**: Deactivated test accounts (`ADM-101`, `BR-104`, `PS-102`, `REF-112`, etc.) were safely deleted, re-pooling their assigned places to the fresh unassigned pool and nullifying actor pointers in audit logs to preserve historical log text.
 
+### 9.8 Dynamic Date Filtering & Custom Date Range in Member Database View (`/admin/users/[id]`)
+* **Multi-Window Date Scoping (`isRecordInDateRange`)**: Evaluates assigned records against the active date window:
+  * For worked records (`status != 'assigned' && status != 'fresh'` and has contact activity): evaluated against `last_contacted_at || updated_at || assigned_at`.
+  * For unworked/fresh records: evaluated against `assigned_at || created_at` (i.e. was the record allocated to this representative during this period).
+  * Supports preset windows: `all` (All Time), `today` (Today), `7days` (Last 7 Days), `month` (Current Calendar Month), and `custom` (Arbitrary From / To date window).
+  * Date string parsing uses local component decomposition (`split('-').map(Number)`) to avoid UTC midnight timezone shifting.
+* **Dynamic Status Pill Recalculation**: The filter pills (`All`, `Worked Today / In Range`, `Fresh`, `Callback`, `Following Up`, `Interested`, `RNR`, `Switched Off`, `Not Interested`, `Not Relevant`, `Converted`) dynamically recalculate counts strictly from `dateScopedBusinesses`.
+* **Custom Range Picker Component**: Renders interactive native HTML5 `<input type="date">` pickers (`From` and `To`) with dark mode color schemes (`colorScheme: 'dark'`), visual summary text, and a one-click `Reset Dates` action.
+* **Filter Reset & Table Counters**: Switching date ranges automatically resets `dbStatusFilter` to `'all'` to give administrators an immediate full-spectrum summary of the new period, while the table header and subview counter display scoped vs. total portfolio size (e.g., `Showing 10 of 10 records in selected period (150 total assigned)`).
+* **Stable High-Level Portfolio Cards**: The 5 persistent KPI metric cards at the top of the user profile (`Total Assigned Leads`, `Worked Today`, `Scheduled Callbacks`, `Interested Prospects`, `Places Converted to Leads`) reflect the member's cumulative all-time performance and daily pacing, unperturbed by temporary directory filter adjustments.
+
+
